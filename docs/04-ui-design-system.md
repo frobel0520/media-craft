@@ -34,9 +34,12 @@
   - 膠囊狀態標籤：`999px`（`--radius-pill`）
 - **間距節奏**：以 `4px` 為基準單位（`8 / 12 / 16 / 20 / 24px`）。
 
-## 4. 元件語言
+## 4. 工作台骨架與元件語言（Canva × Photoshop × iOS）
 
-- **頂部列（Topbar）**：半透明毛玻璃背景（`backdrop-filter: saturate(180%) blur(16px)`），高度緊湊；下方搭配 GCP 風格底線頁籤（`module-nav`）承載多媒體模組切換。
+- **上方欄（Top Application Bar，單層 `56px`）**：半透明毛玻璃背景（`backdrop-filter: saturate(180%) blur(16px)`），左側為側邊欄切換鈕＋多彩科技光圈 Icon＋`media-craft / 模組名`；右側為 WASM 零上傳狀態膠囊＋`系統 / 淺色 / 深色` 三段式主題切換（預設跟隨系統）。
+- **左側導覽欄（Collapsible Sidebar）**：
+  - 桌面版（`>= 960px`）：支援展開（`232px`，圖示＋名稱＋狀態）與收合窄軌（`72px`，Canva / Photoshop 風格純圖示＋tooltip）一鍵切換，狀態持久化於 `localStorage`。
+  - 行動版（`< 960px`）：自動轉為滑出式抽屜（Drawer + 半透明遮罩 + `Escape` 關閉），確保 `375px` 零水平溢位。
 - **模式切換（Segmented Control）**：iOS 分段控制器槽底（`--surface-subtle`）配純白懸浮選中卡（`--surface` + 微陰影 + 主色指示）。
 - **拖放區（Dropzone）**：柔和虛線框、清楚單一步驟引導，拖入時切換為主色淡底高亮。
 - **任務佇列（Grouped List）**：卡片化分組清單，左側圓角縮圖、中央資訊與狀態膠囊、右側對齊操作按鈕。
