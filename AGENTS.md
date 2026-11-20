@@ -20,13 +20,15 @@
 6. 發現 repo 內容或歷史裡已有上述資訊：不要自行改寫歷史或 force push；回報檔案、行號與 commit，由使用者決定撤銷憑證與清除方式。
 <!-- END:privacy-guard -->
 
-## 共用開發規範
+<!-- BEGIN:shared-standards（跨 repo 共用規則，修改時同步更新所有 repo） -->
+## 共用規範（Harbor）
 
-本專案遵循 `frobel0520/harbor` 的權威文件：
-- 開發規範：`standards/DevelopmentStandards.md`
-- 部署手冊：`standards/DeploymentHandbook.md`
-
-本 repo 專案級別：**公開級**（純靜態前端 + Rust WebAssembly，零後端、零帳號、零月費）。
+- 開發規範：frobel0520/harbor 的 `standards/DevelopmentStandards.md`。
+- 部署：frobel0520/harbor 的 `standards/DeploymentHandbook.md`（範本在 `standards/deployment-templates/`）。
+- 讀取方式：本機 session 讀本機的 Harbor clone；雲端 session 沒有 Harbor 時，自行以唯讀方式把 `frobel0520/harbor` 加入 session 再讀（Claude Code 用 add_repo；Codex 雲端沒有這個功能，開 session 時要選 Harbor）。仍讀不到時，先照本檔規則進行並告知使用者。
+- 本 repo 的規則或現況與上述文件衝突時，以權威文件為準；不符合的地方列為本 repo 待辦。repo 既有慣例（例如分支命名）依開發規範的規定保留。
+- 專案級別：公開級
+<!-- END:shared-standards -->
 
 ## 專案核心原則
 
