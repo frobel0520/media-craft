@@ -24,18 +24,31 @@ const UPCOMING_MODULES = [
   { id: 'svg', label: 'SVG 清理壓縮', note: '規劃中' },
 ];
 
-function getInitialTheme(): 'light' | 'dark' {
+type ThemePreference = 'system' | 'light' | 'dark';
+
+const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
+  { id: 'system', label: '系統' },
+  { id: 'light', label: '淺色' },
+  { id: 'dark', label: '深色' },
+];
+
+function getInitialTheme(): ThemePreference {
   try {
     const saved = window.localStorage.getItem('media-craft.theme');
-    if (saved === 'light' || saved === 'dark') return saved;
+    if (saved === 'system' || saved === 'light' || saved === 'dark') return saved;
   } catch {
     // Ignore storage restriction
   }
+  return 'system';
+}
+
+function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
+  if (pref === 'light' || pref === 'dark') return pref;
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 export function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme);
+  const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmError, setWasmError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<ImageTask[]>([]);
@@ -55,12 +68,19 @@ export function App() {
   tasksRef.current = tasks;
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const apply = () => {
+      document.documentElement.dataset.theme = resolveTheme(theme);
+    };
+    apply();
     try {
       window.localStorage.setItem('media-craft.theme', theme);
     } catch {
       // Ignore storage restriction
     }
+    if (theme !== 'system' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, [theme]);
 
   useEffect(() => {
@@ -286,9 +306,13 @@ export function App() {
       <header className="topbar">
         <div className="topbar__inner">
           <div className="brand">
-            <span className="brand__mark" aria-hidden="true">
-              MC
-            </span>
+            <img
+              src={`${import.meta.env.BASE_URL}favicon.svg`}
+              alt=""
+              width={36}
+              height={36}
+              className="brand__icon"
+            />
             <div>
               <div className="brand__name">media-craft</div>
               <div className="brand__tag">Rust + WebAssembly 本地多媒體工作台</div>
@@ -300,14 +324,20 @@ export function App() {
               <span className={`dot ${wasmReady ? 'dot--ok' : ''}`} aria-hidden="true" />
               {wasmReady ? 'Rust WASM 就緒 · 零上傳' : '載入 WASM 核心…'}
             </span>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              aria-label={theme === 'dark' ? '切換為淺色主題' : '切換為深色主題'}
-            >
-              {theme === 'dark' ? '☀ 淺色' : '☾ 深色'}
-            </button>
+            <div className="theme-switch" role="radiogroup" aria-label="外觀主題">
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === opt.id}
+                  className={`theme-switch__btn ${theme === opt.id ? 'theme-switch__btn--active' : ''}`}
+                  onClick={() => setTheme(opt.id)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
