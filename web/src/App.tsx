@@ -470,7 +470,7 @@ export function App() {
         {tasks.length > 0 && (
           <section className="panel queue" aria-label="處理佇列">
             <div className="queue__bar">
-              <div className="queue__stats">
+              <div className="queue__stats" aria-live="polite">
                 <strong>共 {tasks.length} 張圖片</strong>
                 {summary.doneCount > 0 && (
                   <span className="muted">
