@@ -34,6 +34,10 @@ pub extern "C" fn alloc(len: usize) -> *mut u8 {
     ptr
 }
 
+/// Frees a buffer previously allocated by [`alloc`].
+///
+/// # Safety
+/// `ptr` must have been returned by `alloc(len)` and must not be freed more than once.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: usize) {
     if ptr.is_null() || len == 0 {
@@ -56,6 +60,9 @@ pub extern "C" fn last_output_len() -> usize {
 
 /// Inspects an image buffer and writes a UTF-8 JSON report into the output buffer.
 /// Returns the byte length of the JSON report (0 on invalid pointer).
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn inspect_image_wasm(ptr: *const u8, len: usize) -> usize {
     if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
@@ -68,6 +75,9 @@ pub unsafe extern "C" fn inspect_image_wasm(ptr: *const u8, len: usize) -> usize
 
 /// Losslessly strips metadata (EXIF/GPS/XMP/IPTC/tEXt) from JPEG/PNG/WebP.
 /// Returns output byte length, or 0 on unsupported/malformed input.
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn strip_metadata_wasm(ptr: *const u8, len: usize) -> usize {
     if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
@@ -91,6 +101,9 @@ pub extern "C" fn zip_begin() {
 
 /// Adds a file entry (UTF-8 name + raw bytes) to the ZIP batch builder.
 /// Returns 1 on success, 0 on invalid arguments.
+///
+/// # Safety
+/// `name_ptr` and `data_ptr` must point to valid, readable byte slices of lengths `name_len` and `data_len`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn zip_add_file(
     name_ptr: *const u8,

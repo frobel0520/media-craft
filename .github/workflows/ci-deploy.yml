@@ -22,14 +22,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Rust with wasm32 target
+      - name: Setup Rust with wasm32 target and clippy
         run: |
           rustup target add wasm32-unknown-unknown
+          rustup component add clippy
           rustc --version
           cargo --version
 
-      - name: Run Rust workspace unit tests
-        run: cargo test --workspace
+      - name: Run Rust Clippy and workspace unit tests
+        run: |
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
 
       - name: Build Rust WASM core
         run: |

@@ -187,10 +187,10 @@ fn strip_webp(data: &[u8]) -> Result<Vec<u8>, StripError> {
     }
 
     // Clear ICC (bit 5 = 0x20), EXIF (bit 3 = 0x08), and XMP (bit 2 = 0x04) flags in VP8X.
-    if let Some(pos) = vp8x_flags_pos {
-        if let Some(flags) = body.get_mut(pos) {
-            *flags &= !(0x20 | 0x08 | 0x04);
-        }
+    if let Some(pos) = vp8x_flags_pos
+        && let Some(flags) = body.get_mut(pos)
+    {
+        *flags &= !(0x20 | 0x08 | 0x04);
     }
 
     let riff_size = (4usize.saturating_add(body.len())) as u32;
