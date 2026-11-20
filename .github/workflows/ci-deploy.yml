@@ -59,11 +59,10 @@ jobs:
           VITE_BASE_PATH: /
         run: npm run build
 
-      - name: Verify Cloudflare Pages _headers, WASM artifact, and Harbor middleware
+      - name: Verify Cloudflare Pages _headers and WASM artifact
         run: |
           test -f web/dist/_headers
           test -f web/dist/wasm/media_wasm.wasm
-          test -f functions/_middleware.js
 
       - name: Upload dist artifact
         if: github.event_name != 'pull_request'
@@ -82,10 +81,6 @@ jobs:
         run: |
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
-
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
