@@ -18,11 +18,56 @@ const MAX_WIDTH_PRESETS = [
   { label: '最大 800 px', value: 800 },
 ];
 
-const UPCOMING_MODULES = [
-  { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
-  { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
+type ModuleId = 'image' | 'svg' | 'favicon' | 'gif' | 'audio';
+
+const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, 'image'>; label: string; note: string }> = [
   { id: 'svg', label: 'SVG 清理壓縮', note: '規劃中' },
+  { id: 'favicon', label: 'Favicon / PWA 圖示', note: '規劃中' },
+  { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
+  { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
 ];
+
+function ModuleIcon({ id }: { id: ModuleId }) {
+  switch (id) {
+    case 'image':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="3" />
+          <circle cx="8.5" cy="9.5" r="1.5" />
+          <path d="m21 15-4.5-4.5L9 18" />
+        </svg>
+      );
+    case 'svg':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 3 4 9l8 6 8-6-8-6Z" />
+          <path d="m4 15 8 6 8-6" />
+        </svg>
+      );
+    case 'favicon':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+          <rect x="13" y="13" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case 'gif':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="3" />
+          <path d="m10 9 5 3-5 3V9Z" />
+        </svg>
+      );
+    case 'audio':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 12v2M8 8v8M12 5v14M16 9v6M20 11v2" />
+        </svg>
+      );
+  }
+}
 
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -42,6 +87,14 @@ function getInitialTheme(): ThemePreference {
   return 'system';
 }
 
+function getInitialSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem('media-craft.sidebar') === 'collapsed';
+  } catch {
+    return false;
+  }
+}
+
 function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
   if (pref === 'light' || pref === 'dark') return pref;
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -49,6 +102,8 @@ function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
 
 export function App() {
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmError, setWasmError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<ImageTask[]>([]);
@@ -82,6 +137,23 @@ export function App() {
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('media-craft.sidebar', sidebarCollapsed ? 'collapsed' : 'expanded');
+    } catch {
+      // Ignore storage restriction
+    }
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     const worker = new Worker(new URL('./workers/media.worker.ts', import.meta.url), {
@@ -305,24 +377,54 @@ export function App() {
     <div className="shell">
       <header className="topbar">
         <div className="topbar__inner">
-          <div className="brand">
-            <img
-              src={`${import.meta.env.BASE_URL}favicon.svg`}
-              alt=""
-              width={36}
-              height={36}
-              className="brand__icon"
-            />
-            <div>
-              <div className="brand__name">media-craft</div>
-              <div className="brand__tag">Rust + WebAssembly 本地多媒體工作台</div>
+          <div className="topbar__left">
+            <button
+              type="button"
+              className="icon-btn topbar__menu-mobile"
+              onClick={() => setMobileNavOpen((open) => !open)}
+              aria-label={mobileNavOpen ? '關閉導覽側邊欄' : '開啟導覽側邊欄'}
+              aria-expanded={mobileNavOpen}
+              aria-controls="workbench-sidebar"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="icon-btn topbar__menu-desktop"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              aria-label={sidebarCollapsed ? '展開側邊欄' : '收合側邊欄'}
+              aria-expanded={!sidebarCollapsed}
+              aria-controls="workbench-sidebar"
+              title={sidebarCollapsed ? '展開側邊欄' : '收合側邊欄'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                <path d="M9 4v16" />
+              </svg>
+            </button>
+
+            <div className="brand">
+              <img
+                src={`${import.meta.env.BASE_URL}favicon.svg`}
+                alt=""
+                width={32}
+                height={32}
+                className="brand__icon"
+              />
+              <span className="brand__name">media-craft</span>
+              <span className="brand__sep" aria-hidden="true">/</span>
+              <span className="brand__module">圖片工作台</span>
             </div>
           </div>
 
           <div className="topbar__right">
             <span className="privacy-pill" title="瀏覽器 CSP 鎖定 connect-src 'self'，檔案絕不外傳">
               <span className={`dot ${wasmReady ? 'dot--ok' : ''}`} aria-hidden="true" />
-              {wasmReady ? 'Rust WASM 就緒 · 零上傳' : '載入 WASM 核心…'}
+              <span className="privacy-pill__text">
+                {wasmReady ? 'Rust WASM 就緒 · 零上傳' : '載入 WASM 核心…'}
+              </span>
             </span>
             <div className="theme-switch" role="radiogroup" aria-label="外觀主題">
               {THEME_OPTIONS.map((opt) => (
@@ -340,23 +442,69 @@ export function App() {
             </div>
           </div>
         </div>
-
-        <nav className="module-nav" aria-label="多媒體模組">
-          <div className="module-nav__inner">
-            <button type="button" className="module-tab module-tab--active" aria-current="page">
-              圖片壓縮與轉檔
-            </button>
-            {UPCOMING_MODULES.map((mod) => (
-              <span key={mod.id} className="module-tab module-tab--soon" aria-disabled="true">
-                {mod.label}
-                <small>{mod.note}</small>
-              </span>
-            ))}
-          </div>
-        </nav>
       </header>
 
-      <main className="main">
+      <div className={`workbench ${sidebarCollapsed ? 'workbench--collapsed' : ''}`}>
+        {mobileNavOpen && (
+          <div
+            className="sidebar-backdrop"
+            aria-hidden="true"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
+
+        <aside
+          id="workbench-sidebar"
+          className={`sidebar ${sidebarCollapsed ? 'sidebar--collapsed' : ''} ${mobileNavOpen ? 'sidebar--mobile-open' : ''}`}
+          aria-label="多媒體模組導覽"
+        >
+          <div className="sidebar__section">
+            <div className="sidebar__label">影像工具</div>
+            <button
+              type="button"
+              className="sidebar-item sidebar-item--active"
+              aria-current="page"
+              title="圖片壓縮與轉檔"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <span className="sidebar-item__icon">
+                <ModuleIcon id="image" />
+              </span>
+              <span className="sidebar-item__text">圖片壓縮與轉檔</span>
+            </button>
+          </div>
+
+          <div className="sidebar__section">
+            <div className="sidebar__label">即將推出</div>
+            {UPCOMING_MODULES.map((mod) => (
+              <div
+                key={mod.id}
+                className="sidebar-item sidebar-item--soon"
+                aria-disabled="true"
+                title={`${mod.label}（${mod.note}）`}
+              >
+                <span className="sidebar-item__icon">
+                  <ModuleIcon id={mod.id} />
+                </span>
+                <span className="sidebar-item__text">{mod.label}</span>
+                <span className="sidebar-item__tag">{mod.note}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="sidebar__foot">
+            <div className="sidebar-trust" title="所有檔案皆於瀏覽器本地 Rust WASM 運算，絕不上傳">
+              <span className={`dot ${wasmReady ? 'dot--ok' : ''}`} aria-hidden="true" />
+              <div className="sidebar-trust__body">
+                <strong>100% 本地離線</strong>
+                <span>CSP 鎖定零上傳</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div className="workspace">
+          <main className="main">
         <section className="hero">
           <h1 className="hero__title">圖片壓縮、格式轉換與無損去 EXIF</h1>
           <p className="hero__desc">
@@ -632,13 +780,15 @@ export function App() {
             </ul>
           </section>
         )}
-      </main>
+          </main>
 
-      <footer className="footer">
-        <p>
-          media-craft · 純 Rust WebAssembly 核心（<code>media-core</code> + <code>media-wasm</code>）· 100% 本機離線運算
-        </p>
-      </footer>
+          <footer className="footer">
+            <p>
+              media-craft · 純 Rust WebAssembly 核心（<code>media-core</code> + <code>media-wasm</code>）· 100% 本機離線運算
+            </p>
+          </footer>
+        </div>
+      </div>
 
       {compareTask && (
         <CompareModal
