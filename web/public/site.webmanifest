@@ -1,0 +1,26 @@
+{
+  "name": "media-craft · 本地多媒體工作台",
+  "short_name": "media-craft",
+  "description": "100% 瀏覽器本地 Rust + WebAssembly 多媒體工作台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F1115",
+  "theme_color": "#1A73E8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
