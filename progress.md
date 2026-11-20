@@ -15,7 +15,7 @@
 
 ## 待辦
 
-- [ ] 【高】Harbor 後台完成納管收尾：於 `https://harbor-1wk.pages.dev` 將 `frobel0520/media-craft` 納入受管專案，並執行 `npx wrangler pages secret put HARBOR_PREVIEW_SECRET --project-name media-craft` 設定預覽密鑰。
+- [ ] 【高】Harbor 後台完成納管收尾：於 `https://harbor-1wk.pages.dev` 將 `frobel0520/media-craft` 納入受管專案（暫不設定 `HARBOR_PREVIEW_SECRET`）。
 - [ ] 【中】正式網址（`https://media-craft.pages.dev`）實測效能與安全標頭核對（驗證線上 `_headers` 生效、LCP/CLS/TBT 與實體手機上傳體驗）。
 - [ ] 【中】圖片工作台進階功能（圖片裁切／旋轉、自訂檔名規則、批次壓縮進度條與取消鈕、更多格式如 AVIF 支援評估）。
 - [ ] 【低】擴充 Phase 2 多媒體模組（依優先度挑選：SVG 清理最佳化、Favicon／PWA 圖示組產生器、音訊輕量剪輯／WAV 轉檔、GIF 最佳化）。
