@@ -108,6 +108,50 @@ pub fn encode_ico_from_png(png_bytes: &[u8], width: u32, height: u32) -> Result<
     Ok(out)
 }
 
+/// Encodes interleaved little-endian 16-bit PCM audio samples into a standard RIFF/WAVE file.
+pub fn encode_wav_pcm16(
+    pcm_i16_le: &[u8],
+    sample_rate: u32,
+    channels: u16,
+) -> Result<Vec<u8>, &'static str> {
+    if sample_rate == 0 || sample_rate > 384_000 {
+        return Err("invalid WAV sample rate");
+    }
+    if channels == 0 || channels > 8 {
+        return Err("invalid WAV channel count");
+    }
+    let block_align = channels.checked_mul(2).ok_or("WAV block align overflow")?;
+    if pcm_i16_le.is_empty() || !pcm_i16_le.len().is_multiple_of(block_align as usize) {
+        return Err("PCM buffer length must be a non-empty multiple of block align");
+    }
+    let byte_rate = sample_rate
+        .checked_mul(block_align as u32)
+        .ok_or("WAV byte rate overflow")?;
+    let data_len = u32::try_from(pcm_i16_le.len()).map_err(|_| "WAV data exceeds 4GiB")?;
+    let riff_size = data_len
+        .checked_add(36)
+        .ok_or("WAV RIFF size overflow")?;
+
+    let mut out = Vec::with_capacity(44 + pcm_i16_le.len());
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&riff_size.to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    // fmt chunk
+    out.extend_from_slice(b"fmt ");
+    out.extend_from_slice(&16u32.to_le_bytes()); // PCM chunk size
+    out.extend_from_slice(&1u16.to_le_bytes()); // AudioFormat = 1 (PCM)
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&sample_rate.to_le_bytes());
+    out.extend_from_slice(&byte_rate.to_le_bytes());
+    out.extend_from_slice(&block_align.to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes()); // BitsPerSample
+    // data chunk
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data_len.to_le_bytes());
+    out.extend_from_slice(pcm_i16_le);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,5 +194,15 @@ mod tests {
         avif.extend_from_slice(&600u32.to_be_bytes());
         assert_eq!(detect_format(&avif), ImageFormat::Avif);
         assert_eq!(parse_dimensions(&avif, ImageFormat::Avif), Some((800, 600)));
+    }
+
+    #[test]
+    fn encodes_valid_wav_pcm16_header() {
+        let pcm = [0u8, 0, 127, 0].repeat(4); // 4 stereo frames = 16 bytes
+        let wav = encode_wav_pcm16(&pcm, 48_000, 2).expect("wav encode");
+        assert_eq!(&wav[0..4], b"RIFF");
+        assert_eq!(&wav[8..12], b"WAVE");
+        assert_eq!(&wav[36..40], b"data");
+        assert_eq!(wav.len(), 44 + pcm.len());
     }
 }

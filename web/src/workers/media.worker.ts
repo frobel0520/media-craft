@@ -200,6 +200,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const zipBytes = engine.buildZip(entries);
       const zipBuffer = zipBytes.slice().buffer;
       post({ type: 'zipped', id: req.id, buffer: zipBuffer }, [zipBuffer]);
+      return;
+    }
+
+    if (req.type === 'encode-wav') {
+      const pcm = new Uint8Array(req.pcmBuffer);
+      const wavBytes = engine.encodeWav(pcm, req.sampleRate, req.channels);
+      const wavBuffer = wavBytes.slice().buffer;
+      post({ type: 'wav-encoded', id: req.id, buffer: wavBuffer }, [wavBuffer]);
     }
   } catch (err) {
     const id = 'id' in req ? req.id : 'init';

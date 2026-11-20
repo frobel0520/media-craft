@@ -191,3 +191,28 @@ pub unsafe extern "C" fn encode_ico_wasm(
         }
     }
 }
+
+/// Encodes interleaved little-endian 16-bit PCM bytes into a standard RIFF/WAVE file.
+/// Returns output byte length, or 0 on invalid arguments.
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn encode_wav_wasm(
+    ptr: *const u8,
+    len: usize,
+    sample_rate: u32,
+    channels: u16,
+) -> usize {
+    if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
+        return 0;
+    }
+    let pcm = unsafe { core::slice::from_raw_parts(ptr, len) };
+    match media_core::encode::encode_wav_pcm16(pcm, sample_rate, channels) {
+        Ok(bytes) => set_output(bytes),
+        Err(_) => {
+            set_output(Vec::new());
+            0
+        }
+    }
+}
