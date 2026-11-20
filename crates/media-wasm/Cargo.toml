@@ -1,0 +1,12 @@
+[package]
+name = "media-wasm"
+version = "0.1.0"
+edition = "2024"
+description = "WebAssembly ABI bindings for media-core."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+media-core = { path = "../media-core" }

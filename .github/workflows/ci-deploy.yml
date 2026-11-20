@@ -1,0 +1,81 @@
+name: CI and Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust with wasm32 target
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustc --version
+          cargo --version
+
+      - name: Run Rust workspace unit tests
+        run: cargo test --workspace
+
+      - name: Build Rust WASM core
+        run: |
+          cargo build -p media-wasm --target wasm32-unknown-unknown --release
+          mkdir -p web/public/wasm
+          cp target/wasm32-unknown-unknown/release/media_wasm.wasm web/public/wasm/media_wasm.wasm
+          ls -lh web/public/wasm/media_wasm.wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install and audit web dependencies
+        working-directory: web
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+      - name: Typecheck and build web bundle
+        working-directory: web
+        env:
+          VITE_BASE_PATH: /media-craft/
+        run: npm run build
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Require owner and main
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
+      - id: deployment
+        uses: actions/deploy-pages@v4

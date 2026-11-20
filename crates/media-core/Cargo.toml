@@ -1,0 +1,8 @@
+[package]
+name = "media-core"
+version = "0.1.0"
+edition = "2024"
+description = "Zero-dependency pure Rust image inspection, lossless metadata stripping, and ZIP packaging core for media-craft."
+license = "MIT"
+
+[dependencies]

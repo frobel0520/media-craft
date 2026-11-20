@@ -1,0 +1,17 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node / Web
+node_modules/
+web/node_modules/
+web/dist/
+web/public/wasm/*.wasm
+*.tsbuildinfo
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
