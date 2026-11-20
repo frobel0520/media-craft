@@ -303,28 +303,30 @@ fn parse_ifd(
             }
             // DateTime / DateTimeOriginal
             0x0132 | 0x9003 if field_type == 2 => {
-                if report.date_time.is_none() || tag == 0x9003 {
-                    if let Some(s) = read_ascii(tiff, entry_off + 8, val_count, le) {
-                        report.date_time = Some(s);
-                        report.push_tag("DateTime");
-                    }
+                if (report.date_time.is_none() || tag == 0x9003)
+                    && let Some(s) = read_ascii(tiff, entry_off + 8, val_count, le)
+                {
+                    report.date_time = Some(s);
+                    report.push_tag("DateTime");
                 }
             }
             // ExifIFDPointer
             0x8769 => {
-                if let Some(ptr) = read_u32(tiff, entry_off + 8, le).map(|v| v as usize) {
-                    if ptr < tiff.len() && ptr != offset {
-                        *exif_ifd_out = Some(ptr);
-                    }
+                if let Some(ptr) = read_u32(tiff, entry_off + 8, le).map(|v| v as usize)
+                    && ptr < tiff.len()
+                    && ptr != offset
+                {
+                    *exif_ifd_out = Some(ptr);
                 }
             }
             // GPSInfoIFDPointer
             0x8825 => {
-                if let Some(ptr) = read_u32(tiff, entry_off + 8, le).map(|v| v as usize) {
-                    if ptr > 0 && ptr < tiff.len() {
-                        report.has_gps = true;
-                        report.push_tag("GPS");
-                    }
+                if let Some(ptr) = read_u32(tiff, entry_off + 8, le).map(|v| v as usize)
+                    && ptr > 0
+                    && ptr < tiff.len()
+                {
+                    report.has_gps = true;
+                    report.push_tag("GPS");
                 }
             }
             _ => {}

@@ -30,6 +30,7 @@
 
 ## 專案核心原則
 
-1. **100% 本地處理（Zero Upload）**：所有圖片／多媒體解析、壓縮、轉檔、EXIF 剝離與 ZIP 打包皆在瀏覽器本地 WebAssembly / Web Worker 完成；HTML 必須維持 `connect-src 'none'` CSP，禁止任何網路上傳行為。
-2. **Rust 核心純淨與可測**：`crates/media-core` 採用 `#![forbid(unsafe_code)]` 且維持零外部相依，所有二進位解析、剝離與封裝邏輯均需有 `cargo test` 單元測試覆蓋。
+1. **100% 本地處理（Zero Upload）**：所有圖片／多媒體解析、壓縮、轉檔、EXIF 剝離與 ZIP 打包皆在瀏覽器本地 WebAssembly / Web Worker 完成；HTML 與 Cloudflare `_headers` 必須維持 `connect-src 'self'` CSP，禁止任何對外網路上傳行為。
+2. **Rust 核心純淨與可測**：`crates/media-core` 採用 `#![forbid(unsafe_code)]` 且維持零外部相依，所有二進位解析、剝離與封裝邏輯均需通過 `cargo clippy --workspace --all-targets -- -D warnings` 與 `cargo test --workspace`。
 3. **模組化擴充**：以 `media-craft` 為多媒體處理中心，第一階段為圖片工作台（`image` 模組），後續音訊／GIF／SVG 等模組沿用相同 Rust core + WASM + Worker 架構擴充。
+4. **跨 session 接手流程**：每次開工先讀取預設分支 `main` 的 [`progress.md`](progress.md)、[`docs/01-project-plan.md`](docs/01-project-plan.md) 與 [`docs/03-system-design.md`](docs/03-system-design.md)；分支命名遵循 `<type>/<YYYYMMDD>-<slug>`（`feature`、`fix`、`docs`、`chore`、`ci`）。
