@@ -11,6 +11,12 @@ function extForMime(mime: OutputFormat): string {
       return 'jpg';
     case 'image/png':
       return 'png';
+    case 'image/avif':
+      return 'avif';
+    case 'image/bmp':
+      return 'bmp';
+    case 'image/x-icon':
+      return 'ico';
   }
 }
 
@@ -20,6 +26,7 @@ function buildOutputFileName(originalName: string, ext: string, suffix: string):
 }
 
 async function compressAndConvert(
+  engine: MediaWasmEngine,
   inputBytes: Uint8Array,
   inputMime: string,
   options: ProcessOptions,
@@ -30,10 +37,17 @@ async function compressAndConvert(
     let targetWidth = bitmap.width;
     let targetHeight = bitmap.height;
 
-    if (options.maxWidth > 0 && bitmap.width > options.maxWidth) {
-      const scale = options.maxWidth / bitmap.width;
-      targetWidth = Math.max(1, Math.round(bitmap.width * scale));
-      targetHeight = Math.max(1, Math.round(bitmap.height * scale));
+    if (options.maxWidth > 0 && targetWidth > options.maxWidth) {
+      const scale = options.maxWidth / targetWidth;
+      targetWidth = Math.max(1, Math.round(targetWidth * scale));
+      targetHeight = Math.max(1, Math.round(targetHeight * scale));
+    }
+
+    // Standard ICO container supports up to 256x256.
+    if (options.outputFormat === 'image/x-icon' && (targetWidth > 256 || targetHeight > 256)) {
+      const scale = Math.min(256 / targetWidth, 256 / targetHeight);
+      targetWidth = Math.max(1, Math.round(targetWidth * scale));
+      targetHeight = Math.max(1, Math.round(targetHeight * scale));
     }
 
     const canvas = new OffscreenCanvas(targetWidth, targetHeight);
@@ -42,8 +56,8 @@ async function compressAndConvert(
       throw new Error('瀏覽器不支援 OffscreenCanvas 2D 繪圖環境');
     }
 
-    // Fill white background when converting transparent images to JPEG.
-    if (options.outputFormat === 'image/jpeg') {
+    // Fill white background when converting transparent images to JPEG or BMP.
+    if (options.outputFormat === 'image/jpeg' || options.outputFormat === 'image/bmp') {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, targetWidth, targetHeight);
     }
@@ -52,11 +66,31 @@ async function compressAndConvert(
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
 
+    if (options.outputFormat === 'image/bmp') {
+      const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+      const bmpBytes = engine.encodeBmp(
+        new Uint8Array(imgData.data.buffer, imgData.data.byteOffset, imgData.data.byteLength),
+        targetWidth,
+        targetHeight,
+      );
+      return { bytes: bmpBytes, width: targetWidth, height: targetHeight, mimeType: 'image/bmp' };
+    }
+
+    if (options.outputFormat === 'image/x-icon') {
+      const pngBlob = await canvas.convertToBlob({ type: 'image/png' });
+      const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+      const icoBytes = engine.encodeIco(pngBytes, targetWidth, targetHeight);
+      return { bytes: icoBytes, width: targetWidth, height: targetHeight, mimeType: 'image/x-icon' };
+    }
+
     const quality = Math.min(1, Math.max(0.1, options.quality / 100));
     const blob = await canvas.convertToBlob({
       type: options.outputFormat,
       quality: options.outputFormat === 'image/png' ? undefined : quality,
     });
+    if (options.outputFormat === 'image/avif' && blob.type !== 'image/avif') {
+      throw new Error('目前瀏覽器不支援本地 AVIF 編碼，請改選 WebP 或 PNG');
+    }
     const outBytes = new Uint8Array(await blob.arrayBuffer());
     return {
       bytes: outBytes,
@@ -126,7 +160,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         return;
       }
 
-      const converted = await compressAndConvert(inputBytes, beforeReport.mimeType, req.options);
+      const converted = await compressAndConvert(engine, inputBytes, beforeReport.mimeType, req.options);
       // Verify output has 0 EXIF/metadata via Rust WASM; strip if browser added any ancillary chunk.
       let finalBytes = converted.bytes;
       let afterReport = engine.inspectImage(finalBytes);

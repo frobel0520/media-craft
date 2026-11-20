@@ -141,3 +141,53 @@ pub extern "C" fn zip_finish() -> usize {
     ZIP_ENTRIES.with(|cell| cell.borrow_mut().clear());
     set_output(zip_bytes)
 }
+
+/// Encodes an RGBA8888 pixel buffer into a 24-bit Windows BMP.
+/// Returns output byte length, or 0 on invalid arguments.
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn encode_bmp_wasm(
+    ptr: *const u8,
+    len: usize,
+    width: u32,
+    height: u32,
+) -> usize {
+    if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
+        return 0;
+    }
+    let rgba = unsafe { core::slice::from_raw_parts(ptr, len) };
+    match media_core::encode::encode_bmp_rgba(rgba, width, height) {
+        Ok(bytes) => set_output(bytes),
+        Err(_) => {
+            set_output(Vec::new());
+            0
+        }
+    }
+}
+
+/// Wraps a PNG payload (<= 256x256) into a Windows `.ico` file.
+/// Returns output byte length, or 0 on invalid arguments.
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn encode_ico_wasm(
+    ptr: *const u8,
+    len: usize,
+    width: u32,
+    height: u32,
+) -> usize {
+    if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
+        return 0;
+    }
+    let png = unsafe { core::slice::from_raw_parts(ptr, len) };
+    match media_core::encode::encode_ico_from_png(png, width, height) {
+        Ok(bytes) => set_output(bytes),
+        Err(_) => {
+            set_output(Vec::new());
+            0
+        }
+    }
+}
