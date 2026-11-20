@@ -1,9 +1,15 @@
-export type OutputFormat = 'image/webp' | 'image/jpeg' | 'image/png';
+export type OutputFormat =
+  | 'image/webp'
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/avif'
+  | 'image/bmp'
+  | 'image/x-icon';
 
 export type ProcessMode = 'compress' | 'lossless-strip';
 
 export interface InspectReport {
-  format: 'jpeg' | 'png' | 'webp' | 'gif' | 'bmp' | 'unknown';
+  format: 'jpeg' | 'png' | 'webp' | 'avif' | 'gif' | 'bmp' | 'svg' | 'ico' | 'unknown';
   mimeType: string;
   byteLength: number;
   width: number | null;

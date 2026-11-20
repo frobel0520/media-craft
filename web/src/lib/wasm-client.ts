@@ -11,6 +11,8 @@ interface MediaWasmExports {
   zip_begin(): void;
   zip_add_file(namePtr: number, nameLen: number, dataPtr: number, dataLen: number): number;
   zip_finish(): number;
+  encode_bmp_wasm(ptr: number, len: number, width: number, height: number): number;
+  encode_ico_wasm(ptr: number, len: number, width: number, height: number): number;
 }
 
 const textDecoder = new TextDecoder('utf-8');
@@ -111,5 +113,31 @@ export class MediaWasmEngine {
       throw new Error('ZIP 打包失敗');
     }
     return this.readLastOutput();
+  }
+
+  encodeBmp(rgba: Uint8Array, width: number, height: number): Uint8Array {
+    const { ptr, len } = this.writeBytes(rgba);
+    try {
+      const outLen = this.exports.encode_bmp_wasm(ptr, len, width, height);
+      if (outLen === 0) {
+        throw new Error('Rust WASM 編碼 BMP 失敗');
+      }
+      return this.readLastOutput();
+    } finally {
+      this.exports.dealloc(ptr, len);
+    }
+  }
+
+  encodeIco(pngBytes: Uint8Array, width: number, height: number): Uint8Array {
+    const { ptr, len } = this.writeBytes(pngBytes);
+    try {
+      const outLen = this.exports.encode_ico_wasm(ptr, len, width, height);
+      if (outLen === 0) {
+        throw new Error('Rust WASM 封裝 ICO 失敗（尺寸須在 256×256 以內）');
+      }
+      return this.readLastOutput();
+    } finally {
+      this.exports.dealloc(ptr, len);
+    }
   }
 }

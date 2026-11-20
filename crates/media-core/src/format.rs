@@ -5,8 +5,11 @@ pub enum ImageFormat {
     Jpeg,
     Png,
     Webp,
+    Avif,
     Gif,
     Bmp,
+    Svg,
+    Ico,
     Unknown,
 }
 
@@ -16,8 +19,11 @@ impl ImageFormat {
             Self::Jpeg => "jpeg",
             Self::Png => "png",
             Self::Webp => "webp",
+            Self::Avif => "avif",
             Self::Gif => "gif",
             Self::Bmp => "bmp",
+            Self::Svg => "svg",
+            Self::Ico => "ico",
             Self::Unknown => "unknown",
         }
     }
@@ -27,8 +33,11 @@ impl ImageFormat {
             Self::Jpeg => "image/jpeg",
             Self::Png => "image/png",
             Self::Webp => "image/webp",
+            Self::Avif => "image/avif",
             Self::Gif => "image/gif",
             Self::Bmp => "image/bmp",
+            Self::Svg => "image/svg+xml",
+            Self::Ico => "image/x-icon",
             Self::Unknown => "application/octet-stream",
         }
     }
@@ -44,11 +53,26 @@ pub fn detect_format(data: &[u8]) -> ImageFormat {
     if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
         return ImageFormat::Webp;
     }
+    if is_avif(data) {
+        return ImageFormat::Avif;
+    }
     if data.len() >= 6 && (&data[..6] == b"GIF87a" || &data[..6] == b"GIF89a") {
         return ImageFormat::Gif;
     }
     if data.len() >= 2 && &data[..2] == b"BM" {
         return ImageFormat::Bmp;
+    }
+    if data.len() >= 6
+        && data[0] == 0x00
+        && data[1] == 0x00
+        && data[2] == 0x01
+        && data[3] == 0x00
+        && u16::from_le_bytes([data[4], data[5]]) >= 1
+    {
+        return ImageFormat::Ico;
+    }
+    if is_svg(data) {
+        return ImageFormat::Svg;
     }
     ImageFormat::Unknown
 }
@@ -58,8 +82,11 @@ pub fn parse_dimensions(data: &[u8], format: ImageFormat) -> Option<(u32, u32)> 
         ImageFormat::Png => parse_png_dimensions(data),
         ImageFormat::Jpeg => parse_jpeg_dimensions(data),
         ImageFormat::Webp => parse_webp_dimensions(data),
+        ImageFormat::Avif => parse_avif_dimensions(data),
         ImageFormat::Gif => parse_gif_dimensions(data),
         ImageFormat::Bmp => parse_bmp_dimensions(data),
+        ImageFormat::Ico => parse_ico_dimensions(data),
+        ImageFormat::Svg => parse_svg_dimensions(data),
         ImageFormat::Unknown => None,
     }
 }
@@ -171,4 +198,125 @@ fn parse_bmp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     let w = i32::from_le_bytes([data[18], data[19], data[20], data[21]]).unsigned_abs();
     let h = i32::from_le_bytes([data[22], data[23], data[24], data[25]]).unsigned_abs();
     Some((w, h))
+}
+
+fn is_avif(data: &[u8]) -> bool {
+    if data.len() < 12 || &data[4..8] != b"ftyp" {
+        return false;
+    }
+    let box_len = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
+    let end = box_len.min(data.len()).min(128);
+    if end < 12 {
+        return false;
+    }
+    if &data[8..12] == b"avif" || &data[8..12] == b"avis" {
+        return true;
+    }
+    let mut i = 16usize;
+    while i + 4 <= end {
+        if &data[i..i + 4] == b"avif" || &data[i..i + 4] == b"avis" {
+            return true;
+        }
+        i += 4;
+    }
+    false
+}
+
+fn parse_avif_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    // Scan first 64 KiB for ISOBMFF 'ispe' (Image Spatial Extents) fullbox.
+    let limit = data.len().min(65_536);
+    if limit < 20 {
+        return None;
+    }
+    let mut i = 4usize;
+    while i + 16 <= limit {
+        if &data[i..i + 4] == b"ispe" {
+            // ispe fullbox: version(1) + flags(3) + width(4 BE) + height(4 BE)
+            let w = u32::from_be_bytes([data[i + 8], data[i + 9], data[i + 10], data[i + 11]]);
+            let h = u32::from_be_bytes([data[i + 12], data[i + 13], data[i + 14], data[i + 15]]);
+            if w > 0 && h > 0 && w <= 65_536 && h <= 65_536 {
+                return Some((w, h));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn parse_ico_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    if data.len() < 22 {
+        return None;
+    }
+    let count = u16::from_le_bytes([data[4], data[5]]) as usize;
+    let mut best: Option<(u32, u32)> = None;
+    for idx in 0..count.min(64) {
+        let off = 6 + idx * 16;
+        if off + 16 > data.len() {
+            break;
+        }
+        let w = if data[off] == 0 { 256 } else { data[off] as u32 };
+        let h = if data[off + 1] == 0 { 256 } else { data[off + 1] as u32 };
+        if best.is_none_or(|(bw, bh)| w * h > bw * bh) {
+            best = Some((w, h));
+        }
+    }
+    best
+}
+
+fn is_svg(data: &[u8]) -> bool {
+    let head = &data[..data.len().min(512)];
+    let Ok(text) = core::str::from_utf8(head) else {
+        return false;
+    };
+    let trimmed = text.trim_start_matches('\u{feff}').trim_start();
+    trimmed.starts_with("<svg") || (trimmed.starts_with("<?xml") && trimmed.contains("<svg"))
+}
+
+fn parse_svg_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+    let head = &data[..data.len().min(2048)];
+    let text = core::str::from_utf8(head).ok()?;
+    let svg_start = text.find("<svg")?;
+    let tag_end = text[svg_start..].find('>')? + svg_start;
+    let tag = &text[svg_start..=tag_end];
+
+    if let Some(vb) = extract_xml_attr(tag, "viewBox") {
+        let nums: Vec<f32> = vb
+            .split(|c: char| c.is_ascii_whitespace() || c == ',')
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| s.parse::<f32>().ok())
+            .collect();
+        if nums.len() == 4 && nums[2] > 0.0 && nums[3] > 0.0 {
+            return Some((nums[2].round() as u32, nums[3].round() as u32));
+        }
+    }
+
+    let w = extract_xml_attr(tag, "width").and_then(parse_svg_len);
+    let h = extract_xml_attr(tag, "height").and_then(parse_svg_len);
+    match (w, h) {
+        (Some(w), Some(h)) if w > 0 && h > 0 => Some((w, h)),
+        _ => None,
+    }
+}
+
+fn extract_xml_attr<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
+    let pattern = format!("{attr}=");
+    let pos = tag.find(&pattern)? + pattern.len();
+    let rest = &tag[pos..];
+    let quote = rest.as_bytes().first().copied()?;
+    if quote != b'"' && quote != b'\'' {
+        return None;
+    }
+    let inner = &rest[1..];
+    let end = inner.find(quote as char)?;
+    Some(&inner[..end])
+}
+
+fn parse_svg_len(raw: &str) -> Option<u32> {
+    let cleaned = raw.trim().trim_end_matches("px");
+    let v = cleaned.parse::<f32>().ok()?;
+    if v > 0.0 && v <= 65_536.0 {
+        Some(v.round() as u32)
+    } else {
+        None
+    }
 }

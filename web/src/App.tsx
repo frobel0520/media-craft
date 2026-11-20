@@ -565,12 +565,20 @@ export function App() {
                   <option value="image/webp">WebP（體積最小，網頁首選）</option>
                   <option value="image/jpeg">JPEG（通用相容性最高）</option>
                   <option value="image/png">PNG（無損透明背景）</option>
+                  <option value="image/avif">AVIF（次世代高壓縮，依瀏覽器支援）</option>
+                  <option value="image/bmp">BMP（Rust 無壓縮 24-bit 位圖）</option>
+                  <option value="image/x-icon">ICO（Rust 圖示封裝，自動 ≤ 256px）</option>
                 </select>
               </div>
 
               <div className="field">
                 <label htmlFor="quality-range" className="field__label">
-                  壓縮品質：{options.outputFormat === 'image/png' ? '無損' : `${options.quality}%`}
+                  壓縮品質：
+                  {options.outputFormat === 'image/png' ||
+                  options.outputFormat === 'image/bmp' ||
+                  options.outputFormat === 'image/x-icon'
+                    ? '無損'
+                    : `${options.quality}%`}
                 </label>
                 <input
                   id="quality-range"
@@ -578,7 +586,11 @@ export function App() {
                   min={10}
                   max={100}
                   step={1}
-                  disabled={options.outputFormat === 'image/png'}
+                  disabled={
+                    options.outputFormat === 'image/png' ||
+                    options.outputFormat === 'image/bmp' ||
+                    options.outputFormat === 'image/x-icon'
+                  }
                   value={options.quality}
                   onChange={(e) => setOptions((prev) => ({ ...prev, quality: Number(e.target.value) }))}
                 />
@@ -623,7 +635,7 @@ export function App() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,image/bmp"
+            accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/bmp,image/svg+xml,image/x-icon,.avif,.svg,.ico"
             multiple
             className="sr-only"
             id="file-picker"
@@ -635,7 +647,9 @@ export function App() {
             }}
           />
           <p className="dropzone__title">拖放圖片到這裡，或點擊選取多個檔案</p>
-          <p className="dropzone__hint">支援 JPEG、PNG、WebP、GIF、BMP · 單檔上限 100 MB · 不會上傳至任何伺服器</p>
+          <p className="dropzone__hint">
+            支援 JPEG、PNG、WebP、AVIF、GIF、BMP、SVG、ICO · 單檔上限 100 MB · 不會上傳至任何伺服器
+          </p>
           <button
             type="button"
             className="btn btn--primary"
