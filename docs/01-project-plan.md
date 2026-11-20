@@ -2,7 +2,7 @@
 
 - **專案名稱**：`media-craft`（多媒體微服務中心 / 本地多媒體工作台）
 - **專案級別**：公開級（純靜態 Web App + Rust WebAssembly，無後端、無資料庫、無帳號登入）
-- **目標網址**：GitHub Pages（`https://frobel0520.github.io/media-craft/`）或 Cloudflare Pages（零月費）
+- **目標網址**：Cloudflare Pages（`https://media-craft.pages.dev`，零月費）
 - **建立日期**：2026-11-20
 
 ## 1. 問題定義與核心價值

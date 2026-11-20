@@ -1,4 +1,4 @@
-name: CI and Deploy GitHub Pages
+name: CI and Deploy Cloudflare Pages
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: cloudflare-pages
   cancel-in-progress: false
 
 jobs:
@@ -53,29 +53,47 @@ jobs:
       - name: Typecheck and build web bundle
         working-directory: web
         env:
-          VITE_BASE_PATH: /media-craft/
+          VITE_BASE_PATH: /
         run: npm run build
 
-      - name: Upload Pages artifact
+      - name: Verify Cloudflare Pages _headers and WASM artifact
+        run: |
+          test -f web/dist/_headers
+          test -f web/dist/wasm/media_wasm.wasm
+
+      - name: Upload dist artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
+          name: media-craft-dist
           path: web/dist
+          retention-days: 1
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Require owner and main
         run: |
           test "$GITHUB_REF" = refs/heads/main
           test "$GITHUB_ACTOR" = "$GITHUB_REPOSITORY_OWNER"
-      - id: deployment
-        uses: actions/deploy-pages@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: media-craft-dist
+          path: web/dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN secret"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID secret"; exit 1; }
+          npx --yes wrangler@4 pages project create media-craft --production-branch=main >/dev/null 2>&1 || true
+          npx --yes wrangler@4 pages deploy web/dist --project-name=media-craft --branch=main
