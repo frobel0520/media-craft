@@ -60,7 +60,8 @@ export type WorkerRequest =
   | { type: 'init'; wasmUrl: string }
   | { type: 'inspect'; id: string; buffer: ArrayBuffer }
   | { type: 'process'; id: string; fileName: string; buffer: ArrayBuffer; options: ProcessOptions }
-  | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> };
+  | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> }
+  | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number };
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -78,4 +79,5 @@ export type WorkerResponse =
       durationMs: number;
     }
   | { type: 'zipped'; id: string; buffer: ArrayBuffer }
+  | { type: 'wav-encoded'; id: string; buffer: ArrayBuffer }
   | { type: 'error'; id: string; message: string };

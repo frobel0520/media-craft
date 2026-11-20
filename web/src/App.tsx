@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CompareModal } from './components/CompareModal';
+import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
 import type {
   ImageTask,
@@ -18,9 +19,9 @@ const MAX_WIDTH_PRESETS = [
   { label: '最大 800 px', value: 800 },
 ];
 
-type ModuleId = 'image' | 'svg' | 'favicon' | 'gif' | 'audio';
+type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, 'image'>; label: string; note: string }> = [
+const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, 'image' | 'video'>; label: string; note: string }> = [
   { id: 'svg', label: 'SVG 清理壓縮', note: '規劃中' },
   { id: 'favicon', label: 'Favicon / PWA 圖示', note: '規劃中' },
   { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
@@ -35,6 +36,13 @@ function ModuleIcon({ id }: { id: ModuleId }) {
           <rect x="3" y="4" width="18" height="16" rx="3" />
           <circle cx="8.5" cy="9.5" r="1.5" />
           <path d="m21 15-4.5-4.5L9 18" />
+        </svg>
+      );
+    case 'video':
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="2.5" y="5" width="14" height="14" rx="2.5" />
+          <path d="m16.5 10 5-3v10l-5-3v-4Z" />
         </svg>
       );
     case 'svg':
@@ -101,6 +109,7 @@ function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
 }
 
 export function App() {
+  const [activeModule, setActiveModule] = useState<'image' | 'video'>('image');
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -119,6 +128,9 @@ export function App() {
 
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const wavPendingRef = useRef<
+    Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
+  >(new Map());
   const tasksRef = useRef<ImageTask[]>([]);
   tasksRef.current = tasks;
 
@@ -214,6 +226,14 @@ export function App() {
         window.setTimeout(() => URL.revokeObjectURL(url), 5000);
         return;
       }
+      if (msg.type === 'wav-encoded') {
+        const pending = wavPendingRef.current.get(msg.id);
+        if (pending) {
+          wavPendingRef.current.delete(msg.id);
+          pending.resolve(msg.buffer);
+        }
+        return;
+      }
       if (msg.type === 'error') {
         if (msg.id === 'init') {
           setWasmError(msg.message);
@@ -221,6 +241,12 @@ export function App() {
         }
         if (msg.id === 'zip-batch') {
           setZipping(false);
+          return;
+        }
+        const wavPending = wavPendingRef.current.get(msg.id);
+        if (wavPending) {
+          wavPendingRef.current.delete(msg.id);
+          wavPending.reject(new Error(msg.message));
           return;
         }
         setTasks((prev) =>
@@ -244,8 +270,24 @@ export function App() {
     };
   }, []);
 
+  const encodeWavViaWorker = useCallback(
+    (pcmBuffer: ArrayBuffer, sampleRate: number, channels: number): Promise<ArrayBuffer> => {
+      const worker = workerRef.current;
+      if (!worker) return Promise.reject(new Error('WASM Worker 尚未就緒'));
+      const id = `wav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Promise<ArrayBuffer>((resolve, reject) => {
+        wavPendingRef.current.set(id, { resolve, reject });
+        const req: WorkerRequest = { type: 'encode-wav', id, pcmBuffer, sampleRate, channels };
+        worker.postMessage(req, [pcmBuffer]);
+      });
+    },
+    [],
+  );
+
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
-    const incoming = Array.from(fileList).filter((f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp)$/i.test(f.name));
+    const incoming = Array.from(fileList).filter(
+      (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|gif|bmp|svg|ico)$/i.test(f.name),
+    );
     if (incoming.length === 0) return;
 
     const created: ImageTask[] = incoming.map((file) => ({
@@ -415,7 +457,9 @@ export function App() {
               />
               <span className="brand__name">media-craft</span>
               <span className="brand__sep" aria-hidden="true">/</span>
-              <span className="brand__module">圖片工作台</span>
+              <span className="brand__module">
+                {activeModule === 'image' ? '圖片工作台' : '影片轉檔'}
+              </span>
             </div>
           </div>
 
@@ -459,18 +503,36 @@ export function App() {
           aria-label="多媒體模組導覽"
         >
           <div className="sidebar__section">
-            <div className="sidebar__label">影像工具</div>
+            <div className="sidebar__label">核心工具</div>
             <button
               type="button"
-              className="sidebar-item sidebar-item--active"
-              aria-current="page"
+              className={`sidebar-item ${activeModule === 'image' ? 'sidebar-item--active' : ''}`}
+              aria-current={activeModule === 'image' ? 'page' : undefined}
               title="圖片壓縮與轉檔"
-              onClick={() => setMobileNavOpen(false)}
+              onClick={() => {
+                setActiveModule('image');
+                setMobileNavOpen(false);
+              }}
             >
               <span className="sidebar-item__icon">
                 <ModuleIcon id="image" />
               </span>
               <span className="sidebar-item__text">圖片壓縮與轉檔</span>
+            </button>
+            <button
+              type="button"
+              className={`sidebar-item ${activeModule === 'video' ? 'sidebar-item--active' : ''}`}
+              aria-current={activeModule === 'video' ? 'page' : undefined}
+              title="影片轉檔"
+              onClick={() => {
+                setActiveModule('video');
+                setMobileNavOpen(false);
+              }}
+            >
+              <span className="sidebar-item__icon">
+                <ModuleIcon id="video" />
+              </span>
+              <span className="sidebar-item__text">影片轉檔</span>
             </button>
           </div>
 
@@ -505,6 +567,10 @@ export function App() {
 
         <div className="workspace">
           <main className="main">
+            {activeModule === 'video' ? (
+              <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
+            ) : (
+              <>
         <section className="hero">
           <h1 className="hero__title">圖片壓縮、格式轉換與無損去 EXIF</h1>
           <p className="hero__desc">
@@ -794,6 +860,8 @@ export function App() {
             </ul>
           </section>
         )}
+              </>
+            )}
           </main>
 
           <footer className="footer">

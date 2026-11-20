@@ -13,6 +13,7 @@ interface MediaWasmExports {
   zip_finish(): number;
   encode_bmp_wasm(ptr: number, len: number, width: number, height: number): number;
   encode_ico_wasm(ptr: number, len: number, width: number, height: number): number;
+  encode_wav_wasm(ptr: number, len: number, sampleRate: number, channels: number): number;
 }
 
 const textDecoder = new TextDecoder('utf-8');
@@ -134,6 +135,19 @@ export class MediaWasmEngine {
       const outLen = this.exports.encode_ico_wasm(ptr, len, width, height);
       if (outLen === 0) {
         throw new Error('Rust WASM 封裝 ICO 失敗（尺寸須在 256×256 以內）');
+      }
+      return this.readLastOutput();
+    } finally {
+      this.exports.dealloc(ptr, len);
+    }
+  }
+
+  encodeWav(pcmBytes: Uint8Array, sampleRate: number, channels: number): Uint8Array {
+    const { ptr, len } = this.writeBytes(pcmBytes);
+    try {
+      const outLen = this.exports.encode_wav_wasm(ptr, len, sampleRate, channels);
+      if (outLen === 0) {
+        throw new Error('Rust WASM 封裝 WAV 音訊失敗');
       }
       return this.readLastOutput();
     } finally {
