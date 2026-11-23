@@ -59,6 +59,10 @@ jobs:
           VITE_BASE_PATH: /
         run: npm run build
 
+      - name: Run frontend unit and component tests
+        working-directory: web
+        run: npm test
+
       - name: Verify Cloudflare Pages _headers and WASM artifact
         run: |
           test -f web/dist/_headers
