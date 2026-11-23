@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CompareModal } from './components/CompareModal';
+import { FaviconWorkbench } from './components/FaviconWorkbench';
 import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
 import type {
+  FaviconBundle,
   ImageTask,
   OutputFormat,
   ProcessMode,
@@ -23,16 +25,16 @@ const MAX_WIDTH_PRESETS = [
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-type ActiveModuleId = 'image' | 'video' | 'svg';
+type ActiveModuleId = 'image' | 'video' | 'svg' | 'favicon';
 
 const CORE_MODULES: Array<{ id: ActiveModuleId; label: string; title: string }> = [
   { id: 'image', label: '圖片壓縮與轉檔', title: '圖片工作台' },
   { id: 'video', label: '影片轉檔', title: '影片轉檔' },
   { id: 'svg', label: 'SVG 清理壓縮', title: 'SVG 清理' },
+  { id: 'favicon', label: 'Favicon / PWA 圖示', title: 'Favicon 與 PWA 圖示' },
 ];
 
 const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, ActiveModuleId>; label: string; note: string }> = [
-  { id: 'favicon', label: 'Favicon / PWA 圖示', note: '規劃中' },
   { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
   { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
 ];
@@ -146,6 +148,10 @@ export function App() {
   const zipPendingRef = useRef<
     Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
   >(new Map());
+  const faviconPendingRef = useRef(new Map<string, {
+    resolve: (bundle: FaviconBundle) => void;
+    reject: (error: Error) => void;
+  }>());
   const tasksRef = useRef<ImageTask[]>([]);
   tasksRef.current = tasks;
 
@@ -263,6 +269,12 @@ export function App() {
         }
         return;
       }
+      if (msg.type === 'favicon-generated') {
+        const pending = faviconPendingRef.current.get(msg.id);
+        faviconPendingRef.current.delete(msg.id);
+        pending?.resolve(msg.bundle);
+        return;
+      }
       if (msg.type === 'error') {
         if (msg.id === 'init') {
           setWasmError(msg.message);
@@ -270,6 +282,12 @@ export function App() {
         }
         if (msg.id === 'zip-batch') {
           setZipping(false);
+          return;
+        }
+        const faviconPending = faviconPendingRef.current.get(msg.id);
+        if (faviconPending) {
+          faviconPendingRef.current.delete(msg.id);
+          faviconPending.reject(new Error(msg.message));
           return;
         }
         const svgPending = svgPendingRef.current.get(msg.id);
@@ -324,6 +342,17 @@ export function App() {
     },
     [],
   );
+
+  const generateFavicon = useCallback((buffer: ArrayBuffer): Promise<FaviconBundle> => {
+    const worker = workerRef.current;
+    if (!worker) return Promise.reject(new Error('圖示工具尚未就緒'));
+    const id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      faviconPendingRef.current.set(id, { resolve, reject });
+      const request: WorkerRequest = { type: 'favicon-bundle', id, buffer };
+      worker.postMessage(request, [buffer]);
+    });
+  }, []);
 
   const cleanSvgViaWorker = useCallback(
     (buffer: ArrayBuffer, collapseWhitespace: boolean): Promise<{ buffer: ArrayBuffer; report: SvgCleanReport }> => {
@@ -629,6 +658,8 @@ export function App() {
           <main className="main">
             {activeModule === 'svg' ? (
               <SvgWorkbench wasmReady={wasmReady} cleanSvg={cleanSvgViaWorker} buildZip={zipViaWorker} />
+            ) : activeModule === 'favicon' ? (
+              <FaviconWorkbench wasmReady={wasmReady} generate={generateFavicon} />
             ) : activeModule === 'video' ? (
               <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
             ) : (

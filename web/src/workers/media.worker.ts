@@ -1,4 +1,5 @@
 import { MediaWasmEngine } from '../lib/wasm-client';
+import { renderFaviconBundle } from '../lib/favicon-bundle';
 import type { OutputFormat, ProcessOptions, WorkerRequest, WorkerResponse } from '../types';
 
 let enginePromise: Promise<MediaWasmEngine> | null = null;
@@ -189,6 +190,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         },
         [outBuffer],
       );
+      return;
+    }
+
+    if (req.type === 'favicon-bundle') {
+      const bundle = await renderFaviconBundle(engine, req.buffer);
+      post({ type: 'favicon-generated', id: req.id, bundle }, [bundle.zip, ...bundle.files.map((file) => file.buffer)]);
       return;
     }
 
