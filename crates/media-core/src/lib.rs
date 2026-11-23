@@ -6,6 +6,7 @@ pub mod exif;
 pub mod format;
 pub mod json;
 pub mod strip;
+pub mod svg;
 pub mod zip;
 
 use exif::{MetadataReport, inspect_metadata};

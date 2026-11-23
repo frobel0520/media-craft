@@ -61,7 +61,8 @@ export type WorkerRequest =
   | { type: 'inspect'; id: string; buffer: ArrayBuffer }
   | { type: 'process'; id: string; fileName: string; buffer: ArrayBuffer; options: ProcessOptions }
   | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> }
-  | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number };
+  | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number }
+  | { type: 'svg-clean'; id: string; buffer: ArrayBuffer; collapseWhitespace: boolean };
 
 export type WorkerResponse =
   | { type: 'ready' }
@@ -80,4 +81,15 @@ export type WorkerResponse =
     }
   | { type: 'zipped'; id: string; buffer: ArrayBuffer }
   | { type: 'wav-encoded'; id: string; buffer: ArrayBuffer }
+  | { type: 'svg-cleaned'; id: string; buffer: ArrayBuffer; report: SvgCleanReport }
   | { type: 'error'; id: string; message: string };
+
+/** Report produced by the Rust SVG sanitizer (`media_core::svg`). */
+export interface SvgCleanReport {
+  inputBytes: number;
+  outputBytes: number;
+  removedActive: number;
+  removedExternal: number;
+  removedMetadata: number;
+  hasViewBox: boolean;
+}

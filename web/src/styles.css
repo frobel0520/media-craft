@@ -1256,3 +1256,14 @@ input[type='range']::-moz-range-thumb {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* SVG workbench */
+.task-card__thumb--contain {
+  object-fit: contain;
+  padding: 4px;
+}
+
+.svg-policy {
+  margin: 12px 0 0;
+  line-height: 1.6;
+}

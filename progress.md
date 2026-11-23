@@ -1,6 +1,6 @@
 # media-craft Progress
 
-更新：2026-11-20（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
+更新：2026-11-23（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
 
 ## 現況
 
@@ -10,6 +10,7 @@
     - 8 種圖片格式偵測與標頭尺寸解析（JPEG / PNG / WebP / AVIF / GIF / BMP / SVG / ICO）。
     - TIFF/EXIF/GPS 隱私掃描與 JPEG/PNG/WebP 無損二進位去 EXIF。
     - 純 Rust 編碼器：24-bit Windows BMP、PNG-in-ICO（`≤ 256px`）、16-bit PCM WAV、IEEE 802.3 CRC-32 ZIP。
+    - SVG 安全清理與最佳化（`svg.rs`，分支 `feature/20261123-svg-cleaner`，尚未合併）。
   - `crates/media-wasm`：極輕量 `wasm32-unknown-unknown` 執行檔，透過專屬 Web Worker 執行。
 - **Web 工作台與視覺系統（`web/`）**：
   - **GCP × iOS 視覺設計系統**（見 [`docs/04-ui-design-system.md`](docs/04-ui-design-system.md)）：`系統 / 淺色 / 深色` 三段式主題切換（預設跟隨系統）、多彩科技光圈（Prismatic Tech Aperture）Brand Icon 與全套書籤／主畫面縮圖（`favicon.svg`、`apple-touch-icon.png`、`icon-512.png`、`site.webmanifest`）。
@@ -26,7 +27,8 @@
 - [x] 【中】UI 視覺定調與工作台骨架（GCP × iOS 設計系統、系統預設主題、多彩科技光圈 Icon、Canva × Photoshop 單層頂欄與可收合側邊欄）。
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [ ] 【中】圖片工作台進階編輯（裁切／90° 旋轉與翻轉、自訂輸出檔名規則、批次進度條與取消鈕；評估 HEIC 按需懶載入）。
-- [ ] 【低】擴充其餘 Phase 2 多媒體模組（SVG 清理最佳化、Favicon／PWA 圖示組產生器、GIF 最佳化、音訊輕量剪輯）。
+- [ ] 【低】擴充其餘 Phase 2 多媒體模組（Favicon／PWA 圖示組產生器、GIF 最佳化、音訊輕量剪輯）。
+- [ ] 【低】SVG 清理工作台（`feature/20261123-svg-cleaner`）：Rust `svg.rs` 8 項單元測試與瀏覽器惡意樣本驗證通過（輸出可重新解析、保留 viewBox、預覽 0 外部請求、0 CSP 違規）；待 PR 合併部署後在正式站實測。WASM 由約 74 KB 增為約 94 KB。
 - [ ] 【低】站內 0 成本 SEO 與 AI 搜尋優化（`robots.txt`、`sitemap.xml`、`/llms.txt`、JSON-LD `WebApplication`、OG 分享圖）。
 - [ ] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI。
 

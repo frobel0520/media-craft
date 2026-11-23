@@ -12,6 +12,8 @@ const MAX_INPUT_BYTES: usize = 100 * 1024 * 1024; // 100 MiB safety guard
 
 thread_local! {
     static OUTPUT_BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    static SVG_REPORT: RefCell<String> = const { RefCell::new(String::new()) };
+    static SVG_ERROR: RefCell<u32> = const { RefCell::new(0) };
     static ZIP_ENTRIES: RefCell<Vec<(String, Vec<u8>)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -215,4 +217,47 @@ pub unsafe extern "C" fn encode_wav_wasm(
             0
         }
     }
+}
+
+/// Sanitizes and optimizes an SVG document (see `media_core::svg`).
+/// `flags` bit 0 = collapse whitespace between elements.
+/// Returns the cleaned SVG byte length, or 0 on failure (`svg_last_error` gives the reason).
+///
+/// # Safety
+/// `ptr` must point to a valid, readable byte slice of length `len` in WASM linear memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn clean_svg_wasm(ptr: *const u8, len: usize, flags: u32) -> usize {
+    if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
+        SVG_ERROR.with(|cell| *cell.borrow_mut() = media_core::svg::SvgError::TooLarge.code());
+        return 0;
+    }
+    let input = unsafe { core::slice::from_raw_parts(ptr, len) };
+    let options = media_core::svg::SvgCleanOptions { collapse_whitespace: flags & 1 == 1 };
+    match media_core::svg::clean_svg(input, options) {
+        Ok(out) => {
+            SVG_ERROR.with(|cell| *cell.borrow_mut() = 0);
+            SVG_REPORT.with(|cell| *cell.borrow_mut() = media_core::svg::serialize_report_json(&out.report));
+            set_output(out.svg.into_bytes())
+        }
+        Err(err) => {
+            SVG_ERROR.with(|cell| *cell.borrow_mut() = err.code());
+            SVG_REPORT.with(|cell| cell.borrow_mut().clear());
+            set_output(Vec::new());
+            0
+        }
+    }
+}
+
+/// Error code of the last `clean_svg_wasm` call (0 = success).
+#[unsafe(no_mangle)]
+pub extern "C" fn svg_last_error() -> u32 {
+    SVG_ERROR.with(|cell| *cell.borrow())
+}
+
+/// Copies the JSON report of the last successful `clean_svg_wasm` call into the output buffer.
+/// Returns the JSON byte length (0 if there is no report).
+#[unsafe(no_mangle)]
+pub extern "C" fn svg_last_report() -> usize {
+    let json = SVG_REPORT.with(|cell| cell.borrow().clone());
+    set_output(json.into_bytes())
 }

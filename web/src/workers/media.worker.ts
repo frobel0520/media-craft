@@ -208,6 +208,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const wavBytes = engine.encodeWav(pcm, req.sampleRate, req.channels);
       const wavBuffer = wavBytes.slice().buffer;
       post({ type: 'wav-encoded', id: req.id, buffer: wavBuffer }, [wavBuffer]);
+      return;
+    }
+
+    if (req.type === 'svg-clean') {
+      const { svg, report } = engine.cleanSvg(new Uint8Array(req.buffer), req.collapseWhitespace);
+      const svgBuffer = svg.slice().buffer;
+      post({ type: 'svg-cleaned', id: req.id, buffer: svgBuffer, report }, [svgBuffer]);
     }
   } catch (err) {
     const id = 'id' in req ? req.id : 'init';

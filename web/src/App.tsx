@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CompareModal } from './components/CompareModal';
+import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
 import type {
@@ -7,6 +8,7 @@ import type {
   OutputFormat,
   ProcessMode,
   ProcessOptions,
+  SvgCleanReport,
   WorkerRequest,
   WorkerResponse,
 } from './types';
@@ -21,8 +23,15 @@ const MAX_WIDTH_PRESETS = [
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, 'image' | 'video'>; label: string; note: string }> = [
-  { id: 'svg', label: 'SVG 清理壓縮', note: '規劃中' },
+type ActiveModuleId = 'image' | 'video' | 'svg';
+
+const CORE_MODULES: Array<{ id: ActiveModuleId; label: string; title: string }> = [
+  { id: 'image', label: '圖片壓縮與轉檔', title: '圖片工作台' },
+  { id: 'video', label: '影片轉檔', title: '影片轉檔' },
+  { id: 'svg', label: 'SVG 清理壓縮', title: 'SVG 清理' },
+];
+
+const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, ActiveModuleId>; label: string; note: string }> = [
   { id: 'favicon', label: 'Favicon / PWA 圖示', note: '規劃中' },
   { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
   { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
@@ -109,7 +118,7 @@ function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
 }
 
 export function App() {
-  const [activeModule, setActiveModule] = useState<'image' | 'video'>('image');
+  const [activeModule, setActiveModule] = useState<ActiveModuleId>('image');
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -129,6 +138,12 @@ export function App() {
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wavPendingRef = useRef<
+    Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
+  >(new Map());
+  const svgPendingRef = useRef<
+    Map<string, { resolve: (res: { buffer: ArrayBuffer; report: SvgCleanReport }) => void; reject: (err: Error) => void }>
+  >(new Map());
+  const zipPendingRef = useRef<
     Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
   >(new Map());
   const tasksRef = useRef<ImageTask[]>([]);
@@ -215,7 +230,21 @@ export function App() {
         );
         return;
       }
+      if (msg.type === 'svg-cleaned') {
+        const pending = svgPendingRef.current.get(msg.id);
+        if (pending) {
+          svgPendingRef.current.delete(msg.id);
+          pending.resolve({ buffer: msg.buffer, report: msg.report });
+        }
+        return;
+      }
       if (msg.type === 'zipped') {
+        const zipPending = zipPendingRef.current.get(msg.id);
+        if (zipPending) {
+          zipPendingRef.current.delete(msg.id);
+          zipPending.resolve(msg.buffer);
+          return;
+        }
         setZipping(false);
         const zipBlob = new Blob([msg.buffer], { type: 'application/zip' });
         const url = URL.createObjectURL(zipBlob);
@@ -241,6 +270,18 @@ export function App() {
         }
         if (msg.id === 'zip-batch') {
           setZipping(false);
+          return;
+        }
+        const svgPending = svgPendingRef.current.get(msg.id);
+        if (svgPending) {
+          svgPendingRef.current.delete(msg.id);
+          svgPending.reject(new Error(msg.message));
+          return;
+        }
+        const zipPending = zipPendingRef.current.get(msg.id);
+        if (zipPending) {
+          zipPendingRef.current.delete(msg.id);
+          zipPending.reject(new Error(msg.message));
           return;
         }
         const wavPending = wavPendingRef.current.get(msg.id);
@@ -279,6 +320,37 @@ export function App() {
         wavPendingRef.current.set(id, { resolve, reject });
         const req: WorkerRequest = { type: 'encode-wav', id, pcmBuffer, sampleRate, channels };
         worker.postMessage(req, [pcmBuffer]);
+      });
+    },
+    [],
+  );
+
+  const cleanSvgViaWorker = useCallback(
+    (buffer: ArrayBuffer, collapseWhitespace: boolean): Promise<{ buffer: ArrayBuffer; report: SvgCleanReport }> => {
+      const worker = workerRef.current;
+      if (!worker) return Promise.reject(new Error('WASM Worker 尚未就緒'));
+      const id = `svg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Promise((resolve, reject) => {
+        svgPendingRef.current.set(id, { resolve, reject });
+        const req: WorkerRequest = { type: 'svg-clean', id, buffer, collapseWhitespace };
+        worker.postMessage(req, [buffer]);
+      });
+    },
+    [],
+  );
+
+  const zipViaWorker = useCallback(
+    (files: Array<{ name: string; buffer: ArrayBuffer }>): Promise<ArrayBuffer> => {
+      const worker = workerRef.current;
+      if (!worker) return Promise.reject(new Error('WASM Worker 尚未就緒'));
+      const id = `zip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Promise((resolve, reject) => {
+        zipPendingRef.current.set(id, { resolve, reject });
+        const req: WorkerRequest = { type: 'zip', id, files };
+        worker.postMessage(
+          req,
+          files.map((f) => f.buffer),
+        );
       });
     },
     [],
@@ -458,7 +530,7 @@ export function App() {
               <span className="brand__name">media-craft</span>
               <span className="brand__sep" aria-hidden="true">/</span>
               <span className="brand__module">
-                {activeModule === 'image' ? '圖片工作台' : '影片轉檔'}
+                {CORE_MODULES.find((mod) => mod.id === activeModule)?.title}
               </span>
             </div>
           </div>
@@ -504,36 +576,24 @@ export function App() {
         >
           <div className="sidebar__section">
             <div className="sidebar__label">核心工具</div>
-            <button
-              type="button"
-              className={`sidebar-item ${activeModule === 'image' ? 'sidebar-item--active' : ''}`}
-              aria-current={activeModule === 'image' ? 'page' : undefined}
-              title="圖片壓縮與轉檔"
-              onClick={() => {
-                setActiveModule('image');
-                setMobileNavOpen(false);
-              }}
-            >
-              <span className="sidebar-item__icon">
-                <ModuleIcon id="image" />
-              </span>
-              <span className="sidebar-item__text">圖片壓縮與轉檔</span>
-            </button>
-            <button
-              type="button"
-              className={`sidebar-item ${activeModule === 'video' ? 'sidebar-item--active' : ''}`}
-              aria-current={activeModule === 'video' ? 'page' : undefined}
-              title="影片轉檔"
-              onClick={() => {
-                setActiveModule('video');
-                setMobileNavOpen(false);
-              }}
-            >
-              <span className="sidebar-item__icon">
-                <ModuleIcon id="video" />
-              </span>
-              <span className="sidebar-item__text">影片轉檔</span>
-            </button>
+            {CORE_MODULES.map((mod) => (
+              <button
+                key={mod.id}
+                type="button"
+                className={`sidebar-item ${activeModule === mod.id ? 'sidebar-item--active' : ''}`}
+                aria-current={activeModule === mod.id ? 'page' : undefined}
+                title={mod.label}
+                onClick={() => {
+                  setActiveModule(mod.id);
+                  setMobileNavOpen(false);
+                }}
+              >
+                <span className="sidebar-item__icon">
+                  <ModuleIcon id={mod.id} />
+                </span>
+                <span className="sidebar-item__text">{mod.label}</span>
+              </button>
+            ))}
           </div>
 
           <div className="sidebar__section">
@@ -567,7 +627,9 @@ export function App() {
 
         <div className="workspace">
           <main className="main">
-            {activeModule === 'video' ? (
+            {activeModule === 'svg' ? (
+              <SvgWorkbench wasmReady={wasmReady} cleanSvg={cleanSvgViaWorker} buildZip={zipViaWorker} />
+            ) : activeModule === 'video' ? (
               <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
             ) : (
               <>
