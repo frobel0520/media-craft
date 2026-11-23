@@ -3,6 +3,13 @@ import { CompareModal } from './components/CompareModal';
 import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
+import { NO_EDIT, hasEdits, rotateBy, type CropAspect } from './lib/image-edit';
+import {
+  DEFAULT_TEMPLATE_COMPRESS,
+  DEFAULT_TEMPLATE_STRIP,
+  applyNameTemplate,
+  dedupeNames,
+} from './lib/naming';
 import type {
   ImageTask,
   OutputFormat,
@@ -20,6 +27,35 @@ const MAX_WIDTH_PRESETS = [
   { label: '最大 1280 px', value: 1280 },
   { label: '最大 800 px', value: 800 },
 ];
+
+const CROP_PRESETS: Array<{ label: string; value: CropAspect }> = [
+  { label: '不裁切', value: 'original' },
+  { label: '1:1 正方形', value: '1:1' },
+  { label: '4:3 橫式', value: '4:3' },
+  { label: '3:2 橫式', value: '3:2' },
+  { label: '16:9 寬螢幕', value: '16:9' },
+  { label: '3:4 直式', value: '3:4' },
+  { label: '9:16 手機直式', value: '9:16' },
+];
+
+interface BatchState {
+  running: boolean;
+  total: number;
+  completed: number;
+  failed: number;
+  cancelRequested: boolean;
+  /** Set when the last batch stopped early because of a cancel. */
+  cancelledAt: number | null;
+}
+
+const IDLE_BATCH: BatchState = {
+  running: false,
+  total: 0,
+  completed: 0,
+  failed: 0,
+  cancelRequested: false,
+  cancelledAt: null,
+};
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
@@ -133,7 +169,12 @@ export function App() {
     outputFormat: 'image/webp',
     quality: 82,
     maxWidth: 0,
+    edit: NO_EDIT,
+    nameTemplate: DEFAULT_TEMPLATE_COMPRESS,
   });
+  const [batch, setBatch] = useState<BatchState>(IDLE_BATCH);
+  const cancelBatchRef = useRef(false);
+  const processPendingRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
 
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -228,6 +269,11 @@ export function App() {
             };
           }),
         );
+        const settle = processPendingRef.current.get(msg.id);
+        if (settle) {
+          processPendingRef.current.delete(msg.id);
+          settle(true);
+        }
         return;
       }
       if (msg.type === 'svg-cleaned') {
@@ -295,6 +341,11 @@ export function App() {
             item.id === msg.id ? { ...item, status: 'error', error: msg.message } : item,
           ),
         );
+        const settle = processPendingRef.current.get(msg.id);
+        if (settle) {
+          processPendingRef.current.delete(msg.id);
+          settle(false);
+        }
       }
     };
 
@@ -384,14 +435,18 @@ export function App() {
     }
   }, []);
 
+  /** Resolves true when the worker returns the output, false on error. */
   const processTask = useCallback(
-    async (task: ImageTask, opts: ProcessOptions) => {
+    async (task: ImageTask, opts: ProcessOptions, index: number, total: number): Promise<boolean> => {
       const worker = workerRef.current;
-      if (!worker || !wasmReady) return;
+      if (!worker || !wasmReady) return false;
 
       setTasks((prev) =>
         prev.map((item) => (item.id === task.id ? { ...item, status: 'processing', error: null } : item)),
       );
+      const done = new Promise<boolean>((resolve) => {
+        processPendingRef.current.set(task.id, resolve);
+      });
       const buffer = await task.file.arrayBuffer();
       const req: WorkerRequest = {
         type: 'process',
@@ -399,17 +454,68 @@ export function App() {
         fileName: task.file.name,
         buffer,
         options: opts,
+        index,
+        total,
       };
       worker.postMessage(req, [buffer]);
+      return done;
     },
     [wasmReady],
   );
 
+  const processOne = useCallback(
+    (task: ImageTask) => {
+      const list = tasksRef.current;
+      const position = list.findIndex((t) => t.id === task.id);
+      void processTask(task, options, position + 1, list.length);
+    },
+    [options, processTask],
+  );
+
+  /**
+   * Processes the queue one file at a time so progress is exact and a cancel
+   * takes effect before the next file starts. The file already in the worker
+   * is allowed to finish; untouched files stay in the queue for a retry.
+   */
   const processAll = useCallback(async () => {
-    for (const task of tasks) {
-      await processTask(task, options);
+    const snapshot = tasksRef.current.slice();
+    const total = snapshot.length;
+    if (total === 0 || !wasmReady) return;
+
+    cancelBatchRef.current = false;
+    setBatch({ ...IDLE_BATCH, running: true, total });
+
+    let completed = 0;
+    let failed = 0;
+    for (let i = 0; i < snapshot.length; i += 1) {
+      if (cancelBatchRef.current) break;
+      const task = snapshot[i];
+      if (!tasksRef.current.some((t) => t.id === task.id)) {
+        completed += 1; // removed by the user while queued
+        continue;
+      }
+      const ok = await processTask(task, options, i + 1, total);
+      completed += 1;
+      if (!ok) failed += 1;
+      setBatch((prev) => ({ ...prev, completed, failed }));
     }
-  }, [tasks, options, processTask]);
+
+    const cancelled = cancelBatchRef.current && completed < total;
+    cancelBatchRef.current = false;
+    setBatch({
+      running: false,
+      total,
+      completed,
+      failed,
+      cancelRequested: false,
+      cancelledAt: cancelled ? completed : null,
+    });
+  }, [options, processTask, wasmReady]);
+
+  const cancelBatch = useCallback(() => {
+    cancelBatchRef.current = true;
+    setBatch((prev) => (prev.running ? { ...prev, cancelRequested: true } : prev));
+  }, []);
 
   const removeTask = useCallback((id: string) => {
     setTasks((prev) => {
@@ -424,6 +530,7 @@ export function App() {
   }, []);
 
   const clearAll = useCallback(() => {
+    setBatch(IDLE_BATCH);
     for (const task of tasks) {
       URL.revokeObjectURL(task.previewUrl);
       if (task.output?.url) URL.revokeObjectURL(task.output.url);
@@ -446,21 +553,15 @@ export function App() {
     if (!worker || readyItems.length === 0) return;
 
     setZipping(true);
-    const usedNames = new Set<string>();
+    const names = dedupeNames(readyItems.map((item) => item.output?.fileName ?? 'image'));
     const files: Array<{ name: string; buffer: ArrayBuffer }> = [];
     const transfers: Transferable[] = [];
 
-    for (const item of readyItems) {
-      if (!item.output) continue;
-      let name = item.output.fileName;
-      let counter = 2;
-      while (usedNames.has(name)) {
-        name = item.output.fileName.replace(/(\.[^/.]+)$/, `-${counter}$1`);
-        counter += 1;
-      }
-      usedNames.add(name);
-      const buffer = await item.output.blob.arrayBuffer();
-      files.push({ name, buffer });
+    for (let i = 0; i < readyItems.length; i += 1) {
+      const output = readyItems[i].output;
+      if (!output) continue;
+      const buffer = await output.blob.arrayBuffer();
+      files.push({ name: names[i], buffer });
       transfers.push(buffer);
     }
 
@@ -668,7 +769,18 @@ export function App() {
                 role="radio"
                 aria-checked={options.mode === item.id}
                 className={`mode-card ${options.mode === item.id ? 'mode-card--active' : ''}`}
-                onClick={() => setOptions((prev) => ({ ...prev, mode: item.id }))}
+                onClick={() =>
+                  setOptions((prev) => {
+                    // Swap the default suffix only if the user has not customised it.
+                    const defaults = [DEFAULT_TEMPLATE_COMPRESS, DEFAULT_TEMPLATE_STRIP];
+                    const nameTemplate = defaults.includes(prev.nameTemplate)
+                      ? item.id === 'compress'
+                        ? DEFAULT_TEMPLATE_COMPRESS
+                        : DEFAULT_TEMPLATE_STRIP
+                      : prev.nameTemplate;
+                    return { ...prev, mode: item.id, nameTemplate };
+                  })
+                }
               >
                 <strong>{item.title}</strong>
                 <span>{item.desc}</span>
@@ -743,6 +855,126 @@ export function App() {
               </div>
             </div>
           )}
+
+          {options.mode === 'compress' && (
+            <div className="edit-row" role="group" aria-label="裁切、旋轉與翻轉（套用到所有圖片）">
+              <div className="field">
+                <label htmlFor="crop-aspect" className="field__label">
+                  置中裁切比例
+                </label>
+                <select
+                  id="crop-aspect"
+                  className="field__input"
+                  value={options.edit.crop}
+                  onChange={(e) =>
+                    setOptions((prev) => ({
+                      ...prev,
+                      edit: { ...prev.edit, crop: e.target.value as CropAspect },
+                    }))
+                  }
+                >
+                  {CROP_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <span className="field__label" id="transform-label">
+                  旋轉與翻轉：{options.edit.rotation}°
+                  {options.edit.flipH ? ' · 水平翻轉' : ''}
+                  {options.edit.flipV ? ' · 垂直翻轉' : ''}
+                </span>
+                <div className="edit-tools" role="group" aria-labelledby="transform-label">
+                  <button
+                    type="button"
+                    className="btn btn--secondary edit-tools__btn"
+                    onClick={() =>
+                      setOptions((prev) => ({
+                        ...prev,
+                        edit: { ...prev.edit, rotation: rotateBy(prev.edit.rotation, -90) },
+                      }))
+                    }
+                  >
+                    ⟲ 左轉 90°
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary edit-tools__btn"
+                    onClick={() =>
+                      setOptions((prev) => ({
+                        ...prev,
+                        edit: { ...prev.edit, rotation: rotateBy(prev.edit.rotation, 90) },
+                      }))
+                    }
+                  >
+                    ⟳ 右轉 90°
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn--secondary edit-tools__btn ${options.edit.flipH ? 'edit-tools__btn--on' : ''}`}
+                    aria-pressed={options.edit.flipH}
+                    onClick={() =>
+                      setOptions((prev) => ({ ...prev, edit: { ...prev.edit, flipH: !prev.edit.flipH } }))
+                    }
+                  >
+                    ⇋ 水平翻轉
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn--secondary edit-tools__btn ${options.edit.flipV ? 'edit-tools__btn--on' : ''}`}
+                    aria-pressed={options.edit.flipV}
+                    onClick={() =>
+                      setOptions((prev) => ({ ...prev, edit: { ...prev.edit, flipV: !prev.edit.flipV } }))
+                    }
+                  >
+                    ⇵ 垂直翻轉
+                  </button>
+                  {hasEdits(options.edit) && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost edit-tools__btn"
+                      onClick={() => setOptions((prev) => ({ ...prev, edit: NO_EDIT }))}
+                    >
+                      重設
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="field name-field">
+            <label htmlFor="name-template" className="field__label">
+              輸出檔名規則
+            </label>
+            <input
+              id="name-template"
+              type="text"
+              className="field__input"
+              value={options.nameTemplate}
+              maxLength={160}
+              spellCheck={false}
+              aria-describedby="name-template-hint"
+              onChange={(e) => setOptions((prev) => ({ ...prev, nameTemplate: e.target.value }))}
+            />
+            <span id="name-template-hint" className="muted">
+              可用 <code>{'{name}'}</code> 原檔名、<code>{'{n}'}</code> 序號、<code>{'{w}'}</code>
+              ／<code>{'{h}'}</code> 輸出寬高；副檔名自動加上。範例：
+              <strong className="name-field__preview">
+                {applyNameTemplate(options.nameTemplate, {
+                  originalName: tasks[0]?.file.name ?? 'photo.jpg',
+                  index: 1,
+                  total: Math.max(1, tasks.length),
+                  width: 1920,
+                  height: 1080,
+                  ext: options.mode === 'compress' ? 'webp' : 'jpg',
+                })}
+              </strong>
+            </span>
+          </div>
         </section>
 
         <section
@@ -801,29 +1033,66 @@ export function App() {
                 )}
               </div>
               <div className="queue__actions">
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  disabled={!wasmReady}
-                  onClick={() => void processAll()}
-                >
-                  全部處理（{tasks.length}）
-                </button>
+                {batch.running ? (
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={batch.cancelRequested}
+                    onClick={cancelBatch}
+                  >
+                    {batch.cancelRequested ? '取消中…' : '取消批次'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    disabled={!wasmReady}
+                    onClick={() => void processAll()}
+                  >
+                    {batch.cancelledAt !== null ? '重新處理全部' : '全部處理'}（{tasks.length}）
+                  </button>
+                )}
                 {summary.doneCount >= 2 && (
                   <button
                     type="button"
                     className="btn btn--secondary"
-                    disabled={zipping}
+                    disabled={zipping || batch.running}
                     onClick={() => void downloadBatchZip()}
                   >
                     {zipping ? 'Rust 打包中…' : `打包下載 ZIP（${summary.doneCount}）`}
                   </button>
                 )}
-                <button type="button" className="btn btn--ghost" onClick={clearAll}>
+                <button type="button" className="btn btn--ghost" disabled={batch.running} onClick={clearAll}>
                   清空
                 </button>
               </div>
             </div>
+
+            {(batch.running || batch.total > 0) && (
+              <div className="batch-progress">
+                <div className="batch-progress__text" aria-live="polite">
+                  {batch.running
+                    ? `批次處理中：${batch.completed} / ${batch.total}${batch.cancelRequested ? '（完成目前這張後停止）' : ''}`
+                    : batch.cancelledAt !== null
+                      ? `已取消：完成 ${batch.cancelledAt} / ${batch.total}，其餘保留在佇列，可重新處理`
+                      : `批次完成：${batch.completed} / ${batch.total}`}
+                  {batch.failed > 0 && ` · ${batch.failed} 張失敗`}
+                </div>
+                <div
+                  className="progress-track"
+                  role="progressbar"
+                  aria-label="批次處理進度"
+                  aria-valuemin={0}
+                  aria-valuemax={batch.total}
+                  aria-valuenow={batch.completed}
+                >
+                  <div
+                    className="progress-track__fill"
+                    style={{ width: `${batch.total > 0 ? (batch.completed / batch.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <ul className="task-list">
               {tasks.map((task) => {
@@ -901,8 +1170,8 @@ export function App() {
                         <button
                           type="button"
                           className="btn btn--secondary"
-                          disabled={!wasmReady || task.status === 'processing'}
-                          onClick={() => void processTask(task, options)}
+                          disabled={!wasmReady || task.status === 'processing' || batch.running}
+                          onClick={() => processOne(task)}
                         >
                           {task.status === 'processing' ? '處理中…' : '處理'}
                         </button>

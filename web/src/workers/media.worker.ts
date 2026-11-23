@@ -1,3 +1,5 @@
+import { drawWithPlan, planDraw } from '../lib/image-edit';
+import { applyNameTemplate } from '../lib/naming';
 import { MediaWasmEngine } from '../lib/wasm-client';
 import type { OutputFormat, ProcessOptions, WorkerRequest, WorkerResponse } from '../types';
 
@@ -20,11 +22,6 @@ function extForMime(mime: OutputFormat): string {
   }
 }
 
-function buildOutputFileName(originalName: string, ext: string, suffix: string): string {
-  const base = originalName.replace(/\.[^/.]+$/, '');
-  return `${base}${suffix}.${ext}`;
-}
-
 async function compressAndConvert(
   engine: MediaWasmEngine,
   inputBytes: Uint8Array,
@@ -34,21 +31,13 @@ async function compressAndConvert(
   const inputBlob = new Blob([inputBytes.slice().buffer], { type: inputMime || 'application/octet-stream' });
   const bitmap = await createImageBitmap(inputBlob);
   try {
-    let targetWidth = bitmap.width;
-    let targetHeight = bitmap.height;
-
-    if (options.maxWidth > 0 && targetWidth > options.maxWidth) {
-      const scale = options.maxWidth / targetWidth;
-      targetWidth = Math.max(1, Math.round(targetWidth * scale));
-      targetHeight = Math.max(1, Math.round(targetHeight * scale));
-    }
-
-    // Standard ICO container supports up to 256x256.
-    if (options.outputFormat === 'image/x-icon' && (targetWidth > 256 || targetHeight > 256)) {
-      const scale = Math.min(256 / targetWidth, 256 / targetHeight);
-      targetWidth = Math.max(1, Math.round(targetWidth * scale));
-      targetHeight = Math.max(1, Math.round(targetHeight * scale));
-    }
+    // Crop → rotate → flip → resize. Standard ICO container supports up to 256x256.
+    const plan = planDraw(bitmap.width, bitmap.height, options.edit, {
+      maxWidth: options.maxWidth,
+      maxSide: options.outputFormat === 'image/x-icon' ? 256 : 0,
+    });
+    const targetWidth = plan.outWidth;
+    const targetHeight = plan.outHeight;
 
     const canvas = new OffscreenCanvas(targetWidth, targetHeight);
     const ctx = canvas.getContext('2d');
@@ -64,7 +53,9 @@ async function compressAndConvert(
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+    ctx.save();
+    drawWithPlan(ctx, bitmap, plan);
+    ctx.restore();
 
     if (options.outputFormat === 'image/bmp') {
       const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
@@ -139,7 +130,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const cleaned = engine.stripMetadata(inputBytes);
         const afterReport = engine.inspectImage(cleaned);
         const ext = beforeReport.format === 'jpeg' ? 'jpg' : beforeReport.format;
-        const fileName = buildOutputFileName(req.fileName, ext, '-clean');
+        const fileName = applyNameTemplate(req.options.nameTemplate, {
+          originalName: req.fileName,
+          index: req.index,
+          total: req.total,
+          width: afterReport.width ?? beforeReport.width ?? 0,
+          height: afterReport.height ?? beforeReport.height ?? 0,
+          ext,
+        });
         const durationMs = Math.max(1, Math.round(performance.now() - start));
         const outBuffer = cleaned.slice().buffer;
         post(
@@ -170,7 +168,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
 
       const ext = extForMime(converted.mimeType);
-      const fileName = buildOutputFileName(req.fileName, ext, '-craft');
+      const fileName = applyNameTemplate(req.options.nameTemplate, {
+        originalName: req.fileName,
+        index: req.index,
+        total: req.total,
+        width: converted.width,
+        height: converted.height,
+        ext,
+      });
       const durationMs = Math.max(1, Math.round(performance.now() - start));
       const outBuffer = finalBytes.slice().buffer;
 

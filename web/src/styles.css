@@ -539,6 +539,55 @@ a:focus-visible {
   gap: 16px;
 }
 
+.edit-row {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 16px;
+}
+
+.edit-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-tools__btn {
+  min-height: 44px;
+}
+
+.edit-tools .edit-tools__btn--on,
+.edit-tools .edit-tools__btn--on:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.name-field {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.name-field__preview {
+  margin-left: 4px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.batch-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.batch-progress__text {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1135,6 +1184,14 @@ input[type='range']::-moz-range-thumb {
 
   .controls-grid {
     grid-template-columns: 1fr;
+  }
+
+  .edit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .edit-tools__btn {
+    flex: 1 1 calc(50% - 4px);
   }
 
   .task-card {

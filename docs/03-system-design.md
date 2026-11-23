@@ -12,7 +12,8 @@
    ├── 2a. Mode = "lossless-strip"
    │      -> Rust WASM: strip_metadata(bytes) (zero pixel re-encoding)
    ├── 2b. Mode = "compress-convert"
-   │      -> createImageBitmap + OffscreenCanvas (resize + WebP/JPEG/PNG encode)
+   │      -> createImageBitmap + OffscreenCanvas
+   │         (lib/image-edit.ts: center crop → rotate 90° steps → flip in output space → resize; then encode)
    │      -> Rust WASM: inspect_image(output) (verify 0 metadata leakage)
    └── 3. Batch Export
           -> Rust WASM: zip_begin / zip_add_file / zip_finish -> .zip Blob

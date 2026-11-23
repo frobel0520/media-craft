@@ -1,3 +1,5 @@
+import type { ImageEdit } from './lib/image-edit';
+
 export type OutputFormat =
   | 'image/webp'
   | 'image/jpeg'
@@ -33,6 +35,8 @@ export interface ProcessOptions {
   outputFormat: OutputFormat;
   quality: number; // 10..100
   maxWidth: number; // 0 = keep original
+  edit: ImageEdit; // ignored in lossless-strip mode (no pixel changes allowed)
+  nameTemplate: string; // see lib/naming.ts
 }
 
 export interface ProcessedOutput {
@@ -59,7 +63,15 @@ export interface ImageTask {
 export type WorkerRequest =
   | { type: 'init'; wasmUrl: string }
   | { type: 'inspect'; id: string; buffer: ArrayBuffer }
-  | { type: 'process'; id: string; fileName: string; buffer: ArrayBuffer; options: ProcessOptions }
+  | {
+      type: 'process';
+      id: string;
+      fileName: string;
+      buffer: ArrayBuffer;
+      options: ProcessOptions;
+      index: number; // 1-based queue position, used by the {n} name token
+      total: number;
+    }
   | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> }
   | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number }
   | { type: 'svg-clean'; id: string; buffer: ArrayBuffer; collapseWhitespace: boolean };
