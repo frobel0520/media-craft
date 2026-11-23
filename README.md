@@ -11,6 +11,7 @@
   - TIFF/EXIF IFD 解析器（相機廠牌型號、拍攝時間、軟體、GPS 座標偵測）與 PNG/WebP 中繼資料掃描。
   - 無損二進位中繼資料剝離（JPEG / PNG / WebP，0% 重新編碼畫質損失）。
   - 零相依 ZIP 封裝器（IEEE 802.3 CRC-32）。
+  - SVG 安全清理與最佳化（移除腳本、事件屬性、外部引用、DOCTYPE／實體、註解與編輯器資料，保留 viewBox）。
 - **`crates/media-wasm`**：
   - 編譯為極輕量 `wasm32-unknown-unknown`（~47 KB）供瀏覽器直接載入。
 - **`web/`**（Vite + React + TypeScript）：

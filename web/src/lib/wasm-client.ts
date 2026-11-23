@@ -1,4 +1,4 @@
-import type { InspectReport } from '../types';
+import type { InspectReport, SvgCleanReport } from '../types';
 
 interface MediaWasmExports {
   memory: WebAssembly.Memory;
@@ -14,7 +14,18 @@ interface MediaWasmExports {
   encode_bmp_wasm(ptr: number, len: number, width: number, height: number): number;
   encode_ico_wasm(ptr: number, len: number, width: number, height: number): number;
   encode_wav_wasm(ptr: number, len: number, sampleRate: number, channels: number): number;
+  clean_svg_wasm(ptr: number, len: number, flags: number): number;
+  svg_last_error(): number;
+  svg_last_report(): number;
 }
+
+const SVG_ERROR_MESSAGES: Record<number, string> = {
+  1: 'SVG 檔案超過 20 MiB 上限',
+  2: 'SVG 不是有效的 UTF-8 文字檔',
+  3: 'SVG 格式錯誤（標籤未正確關閉或屬性重複），無法安全解析',
+  4: '這不是 SVG 檔案（最外層必須是 <svg>）',
+  5: 'SVG 巢狀層數超過 256 層上限',
+};
 
 const textDecoder = new TextDecoder('utf-8');
 const textEncoder = new TextEncoder();
@@ -150,6 +161,26 @@ export class MediaWasmEngine {
         throw new Error('Rust WASM 封裝 WAV 音訊失敗');
       }
       return this.readLastOutput();
+    } finally {
+      this.exports.dealloc(ptr, len);
+    }
+  }
+
+  cleanSvg(bytes: Uint8Array, collapseWhitespace: boolean): { svg: Uint8Array; report: SvgCleanReport } {
+    if (bytes.byteLength === 0) {
+      throw new Error('SVG 檔案為空');
+    }
+    const { ptr, len } = this.writeBytes(bytes);
+    try {
+      const outLen = this.exports.clean_svg_wasm(ptr, len, collapseWhitespace ? 1 : 0);
+      if (outLen === 0) {
+        const code = this.exports.svg_last_error();
+        throw new Error(SVG_ERROR_MESSAGES[code] ?? 'Rust WASM 無法清理此 SVG');
+      }
+      const svg = this.readLastOutput();
+      this.exports.svg_last_report();
+      const report = JSON.parse(textDecoder.decode(this.readLastOutput())) as SvgCleanReport;
+      return { svg, report };
     } finally {
       this.exports.dealloc(ptr, len);
     }
