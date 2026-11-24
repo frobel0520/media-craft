@@ -1,3 +1,4 @@
+import { computeCropRect, formatOutputFileName } from '../lib/image-file';
 import { MediaWasmEngine } from '../lib/wasm-client';
 import { renderFaviconBundle } from '../lib/favicon-bundle';
 import type { OutputFormat, ProcessOptions, WorkerRequest, WorkerResponse } from '../types';
@@ -35,8 +36,10 @@ async function compressAndConvert(
   const inputBlob = new Blob([inputBytes.slice().buffer], { type: inputMime || 'application/octet-stream' });
   const bitmap = await createImageBitmap(inputBlob);
   try {
-    let targetWidth = bitmap.width;
-    let targetHeight = bitmap.height;
+    const crop = computeCropRect(bitmap.width, bitmap.height, options.cropRatio);
+    const rotated = options.rotate === 90 || options.rotate === 270;
+    let targetWidth = rotated ? crop.sh : crop.sw;
+    let targetHeight = rotated ? crop.sw : crop.sh;
 
     if (options.maxWidth > 0 && targetWidth > options.maxWidth) {
       const scale = options.maxWidth / targetWidth;
@@ -65,7 +68,17 @@ async function compressAndConvert(
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+
+    ctx.save();
+    ctx.translate(targetWidth / 2, targetHeight / 2);
+    if (options.rotate !== 0) {
+      ctx.rotate((options.rotate * Math.PI) / 180);
+    }
+    ctx.scale(options.flipH ? -1 : 1, options.flipV ? -1 : 1);
+    const drawW = rotated ? targetHeight : targetWidth;
+    const drawH = rotated ? targetWidth : targetHeight;
+    ctx.drawImage(bitmap, crop.sx, crop.sy, crop.sw, crop.sh, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
 
     if (options.outputFormat === 'image/bmp') {
       const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
@@ -171,7 +184,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
 
       const ext = extForMime(converted.mimeType);
-      const fileName = buildOutputFileName(req.fileName, ext, '-craft');
+      const fileName = formatOutputFileName(req.fileName, ext, req.options.fileNameTemplate, {
+        width: converted.width,
+        height: converted.height,
+        index: req.index,
+      });
       const durationMs = Math.max(1, Math.round(performance.now() - start));
       const outBuffer = finalBytes.slice().buffer;
 
