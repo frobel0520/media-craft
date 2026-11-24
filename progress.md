@@ -32,6 +32,7 @@
 - [x] 【低】站內 0 成本 SEO 與 AI 搜尋優化（已合併，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)）。
 - [x] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI（已合併，見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)）。
 - [ ] 【低】擴充其餘 Phase 2 多媒體模組（GIF 最佳化、音訊輕量剪輯；評估 HEIC 按需懶載入）。
+  - GIF 最佳化在功能分支驗證影格、透明及時間一致，待審。見 [GIF 驗收](docs/evidence/gif-optimize-20261123.md)。
 
 ## 限制
 

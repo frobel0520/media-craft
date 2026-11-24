@@ -248,6 +248,25 @@ pub unsafe extern "C" fn clean_svg_wasm(ptr: *const u8, len: usize, flags: u32) 
     }
 }
 
+/// Optimize a GIF's container without decoding or re-encoding the image data.
+///
+/// # Safety
+/// `ptr` must point to a readable byte slice of length `len` in WASM linear memory.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn optimize_gif_wasm(ptr: *const u8, len: usize) -> usize {
+    if ptr.is_null() || len == 0 || len > MAX_INPUT_BYTES {
+        return 0;
+    }
+    let input = unsafe { core::slice::from_raw_parts(ptr, len) };
+    match media_core::gif::optimize_gif(input) {
+        Some(bytes) => set_output(bytes),
+        None => {
+            set_output(Vec::new());
+            0
+        }
+    }
+}
+
 /// Error code of the last `clean_svg_wasm` call (0 = success).
 #[unsafe(no_mangle)]
 pub extern "C" fn svg_last_error() -> u32 {
