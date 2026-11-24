@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AudioWorkbench } from './components/AudioWorkbench';
 import { CompareModal } from './components/CompareModal';
 import { FaviconWorkbench } from './components/FaviconWorkbench';
 import { SvgWorkbench } from './components/SvgWorkbench';
@@ -28,18 +29,18 @@ const MAX_WIDTH_PRESETS = [
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-type ActiveModuleId = 'image' | 'video' | 'svg' | 'favicon';
+type ActiveModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'audio';
 
 const CORE_MODULES: Array<{ id: ActiveModuleId; label: string; title: string }> = [
   { id: 'image', label: '圖片壓縮與轉檔', title: '圖片工作台' },
   { id: 'video', label: '影片轉檔', title: '影片轉檔' },
   { id: 'svg', label: 'SVG 清理壓縮', title: 'SVG 清理' },
   { id: 'favicon', label: 'Favicon / PWA 圖示', title: 'Favicon 與 PWA 圖示' },
+  { id: 'audio', label: '音訊剪輯與轉檔', title: '音訊剪輯' },
 ];
 
 const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, ActiveModuleId>; label: string; note: string }> = [
   { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
-  { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
 ];
 
 function ModuleIcon({ id }: { id: ModuleId }) {
@@ -700,6 +701,8 @@ export function App() {
               <FaviconWorkbench wasmReady={wasmReady} generate={generateFavicon} />
             ) : activeModule === 'video' ? (
               <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
+            ) : activeModule === 'audio' ? (
+              <AudioWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
             ) : (
               <>
         <section className="hero">
