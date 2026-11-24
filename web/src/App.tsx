@@ -177,7 +177,12 @@ export function App() {
   });
   const [batch, setBatch] = useState<BatchState>(IDLE_BATCH);
   const cancelBatchRef = useRef(false);
-  const processPendingRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
+  const processSequenceRef = useRef(0);
+  const processPendingRef = useRef(new Map<string, {
+    requestId: string;
+    done: Promise<boolean>;
+    settle: (ok: boolean) => void;
+  }>());
 
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -230,6 +235,12 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mobileNavOpen]);
 
+  const failImageTask = useCallback((id: string, message: string) => {
+    setTasks((prev) => prev.map((item) => (
+      item.id === id ? { ...item, status: 'error', error: message } : item
+    )));
+  }, []);
+
   useEffect(() => {
     const worker = new Worker(new URL('./workers/media.worker.ts', import.meta.url), {
       type: 'module',
@@ -237,26 +248,43 @@ export function App() {
     workerRef.current = worker;
 
     const wasmUrl = new URL(`${import.meta.env.BASE_URL}wasm/media_wasm.wasm`, window.location.href).href;
+    const pendingImages = processPendingRef.current;
+    let initialized = false;
+
+    const failPendingImages = (message: string) => {
+      if (!initialized) setWasmError(message);
+      for (const [id, pending] of pendingImages) {
+        failImageTask(id, message);
+        pending.settle(false);
+      }
+    };
+    worker.addEventListener('error', () => failPendingImages('圖片處理 Worker 發生錯誤，請重試'));
+    worker.addEventListener('messageerror', () => failPendingImages('無法讀取圖片處理結果，請重試'));
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const msg = event.data;
       if (msg.type === 'ready') {
+        initialized = true;
         setWasmReady(true);
         setWasmError(null);
         return;
       }
       if (msg.type === 'inspected') {
+        const id = msg.id.slice('inspect:'.length);
         setTasks((prev) =>
-          prev.map((item) => (item.id === msg.id ? { ...item, beforeReport: msg.report } : item)),
+          prev.map((item) => (item.id === id ? { ...item, beforeReport: msg.report } : item)),
         );
         return;
       }
       if (msg.type === 'processed') {
+        const id = msg.id.split(':', 1)[0];
+        const pending = pendingImages.get(id);
+        if (pending?.requestId !== msg.id) return;
         const blob = new Blob([msg.buffer], { type: msg.mimeType });
         const url = URL.createObjectURL(blob);
         setTasks((prev) =>
           prev.map((item) => {
-            if (item.id !== msg.id) return item;
+            if (item.id !== id) return item;
             if (item.output?.url) URL.revokeObjectURL(item.output.url);
             return {
               ...item,
@@ -276,11 +304,7 @@ export function App() {
             };
           }),
         );
-        const settle = processPendingRef.current.get(msg.id);
-        if (settle) {
-          processPendingRef.current.delete(msg.id);
-          settle(true);
-        }
+        pending.settle(true);
         return;
       }
       if (msg.type === 'svg-cleaned') {
@@ -355,15 +379,18 @@ export function App() {
           wavPending.reject(new Error(msg.message));
           return;
         }
-        setTasks((prev) =>
-          prev.map((item) =>
-            item.id === msg.id ? { ...item, status: 'error', error: msg.message } : item,
-          ),
-        );
-        const settle = processPendingRef.current.get(msg.id);
-        if (settle) {
-          processPendingRef.current.delete(msg.id);
-          settle(false);
+        if (msg.id.startsWith('inspect:')) {
+          const id = msg.id.slice('inspect:'.length);
+          setTasks((prev) => prev.map((item) => (
+            item.id === id && item.status === 'idle' ? { ...item, status: 'error', error: msg.message } : item
+          )));
+          return;
+        }
+        const id = msg.id.split(':', 1)[0];
+        const pending = pendingImages.get(id);
+        if (pending?.requestId === msg.id) {
+          failImageTask(id, msg.message);
+          pending.settle(false);
         }
       }
     };
@@ -374,12 +401,13 @@ export function App() {
     return () => {
       worker.terminate();
       workerRef.current = null;
+      for (const pending of pendingImages.values()) pending.settle(false);
       for (const task of tasksRef.current) {
         URL.revokeObjectURL(task.previewUrl);
         if (task.output?.url) URL.revokeObjectURL(task.output.url);
       }
     };
-  }, []);
+  }, [failImageTask]);
 
   const encodeWavViaWorker = useCallback(
     (pcmBuffer: ArrayBuffer, sampleRate: number, channels: number): Promise<ArrayBuffer> => {
@@ -457,9 +485,17 @@ export function App() {
     if (!worker) return;
 
     for (const item of created) {
-      const buffer = await item.file.arrayBuffer();
-      const req: WorkerRequest = { type: 'inspect', id: item.id, buffer };
-      worker.postMessage(req, [buffer]);
+      try {
+        const buffer = await item.file.arrayBuffer();
+        const req: WorkerRequest = { type: 'inspect', id: `inspect:${item.id}`, buffer };
+        worker.postMessage(req, [buffer]);
+      } catch {
+        setTasks((prev) => prev.map((task) => (
+          task.id === item.id && task.status === 'idle'
+            ? { ...task, status: 'error', error: '無法讀取或檢查圖片，請重試' }
+            : task
+        )));
+      }
     }
   }, []);
 
@@ -468,27 +504,45 @@ export function App() {
     async (task: ImageTask, opts: ProcessOptions, index: number, total: number): Promise<boolean> => {
       const worker = workerRef.current;
       if (!worker || !wasmReady) return false;
+      const pendingImages = processPendingRef.current;
+      const existing = pendingImages.get(task.id);
+      if (existing) return existing.done;
 
       setTasks((prev) =>
         prev.map((item) => (item.id === task.id ? { ...item, status: 'processing', error: null } : item)),
       );
-      const done = new Promise<boolean>((resolve) => {
-        processPendingRef.current.set(task.id, resolve);
+      let resolve!: (ok: boolean) => void;
+      const done = new Promise<boolean>((settle) => {
+        resolve = settle;
       });
-      const buffer = await task.file.arrayBuffer();
-      const req: WorkerRequest = {
-        type: 'process',
-        id: task.id,
-        fileName: task.file.name,
-        buffer,
-        options: opts,
-        index,
-        total,
+      const requestId = `${task.id}:${++processSequenceRef.current}`;
+      const pending = {
+        requestId,
+        done,
+        settle(ok: boolean) {
+          pendingImages.delete(task.id);
+          resolve(ok);
+        },
       };
-      worker.postMessage(req, [buffer]);
+      pendingImages.set(task.id, pending);
+
+      try {
+        const buffer = await task.file.arrayBuffer();
+        if (pendingImages.get(task.id) === pending) {
+          const req: WorkerRequest = {
+            type: 'process', id: requestId, fileName: task.file.name, buffer, options: opts, index, total,
+          };
+          worker.postMessage(req, [buffer]);
+        }
+      } catch {
+        if (pendingImages.get(task.id) === pending) {
+          failImageTask(task.id, '無法讀取或送出圖片，請重試');
+          pending.settle(false);
+        }
+      }
       return done;
     },
-    [wasmReady],
+    [failImageTask, wasmReady],
   );
 
   const processOne = useCallback(
@@ -515,29 +569,31 @@ export function App() {
 
     let completed = 0;
     let failed = 0;
-    for (let i = 0; i < snapshot.length; i += 1) {
-      if (cancelBatchRef.current) break;
-      const task = snapshot[i];
-      if (!tasksRef.current.some((t) => t.id === task.id)) {
-        completed += 1; // removed by the user while queued
-        continue;
+    try {
+      for (let i = 0; i < snapshot.length; i += 1) {
+        if (cancelBatchRef.current) break;
+        const task = snapshot[i];
+        if (!tasksRef.current.some((t) => t.id === task.id)) {
+          completed += 1; // removed by the user while queued
+          continue;
+        }
+        const ok = await processTask(task, options, i + 1, total);
+        completed += 1;
+        if (!ok) failed += 1;
+        setBatch((prev) => ({ ...prev, completed, failed }));
       }
-      const ok = await processTask(task, options, i + 1, total);
-      completed += 1;
-      if (!ok) failed += 1;
-      setBatch((prev) => ({ ...prev, completed, failed }));
+    } finally {
+      const cancelled = cancelBatchRef.current && completed < total;
+      cancelBatchRef.current = false;
+      setBatch({
+        running: false,
+        total,
+        completed,
+        failed,
+        cancelRequested: false,
+        cancelledAt: cancelled ? completed : null,
+      });
     }
-
-    const cancelled = cancelBatchRef.current && completed < total;
-    cancelBatchRef.current = false;
-    setBatch({
-      running: false,
-      total,
-      completed,
-      failed,
-      cancelRequested: false,
-      cancelledAt: cancelled ? completed : null,
-    });
   }, [options, processTask, wasmReady]);
 
   const cancelBatch = useCallback(() => {

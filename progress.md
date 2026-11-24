@@ -1,6 +1,6 @@
 # media-craft Progress
 
-更新：2026-11-23（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
+更新：2026-11-24（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
 
 ## 現況
 
@@ -27,6 +27,7 @@
 - [x] 【中】UI 視覺定調與工作台骨架（GCP × iOS 設計系統、系統預設主題、多彩科技光圈 Icon、Canva × Photoshop 單層頂欄與可收合側邊欄）。
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [ ] 【中】圖片工作台進階編輯（分支 `feature/20261123-image-edit-batch`，PR 待審）：置中裁切比例、90° 旋轉與水平／垂直翻轉、輸出檔名規則（`{name}`／`{n}`／`{w}`／`{h}`）、批次進度條與取消後重試；標記圖像素、命名、ZIP 與手機寬度驗證見 [`docs/evidence/image-edit-batch-20261123.md`](docs/evidence/image-edit-batch-20261123.md)。HEIC 只做評估，建議 Safari 原生優先＋按需載入 libheif-js，未導入。合併部署後要在正式站重測效能。
+  - 2026-11-24 補齊原檔名保留及批次失敗後取消／重試，PR #15 待複審。證據檔已補 Vitest 與本機 Chrome 複驗結果。
 - [ ] 【低】擴充其餘 Phase 2 多媒體模組（Favicon／PWA 圖示組產生器、GIF 最佳化、音訊輕量剪輯）。
   - Favicon／PWA 圖示組在功能分支完成本機雙寬驗收，待審。見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)。
 - [ ] 【低】SVG 清理工作台（`feature/20261123-svg-cleaner`）：Rust `svg.rs` 8 項單元測試與瀏覽器惡意樣本驗證通過（輸出可重新解析、保留 viewBox、預覽 0 外部請求、0 CSP 違規）；待 PR 合併部署後在正式站實測。WASM 由約 74 KB 增為約 94 KB。

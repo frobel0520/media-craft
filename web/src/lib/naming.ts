@@ -40,11 +40,13 @@ export function applyNameTemplate(template: string, ctx: NameContext): string {
   const total = Math.max(1, ctx.total);
   const pad = String(total).length;
   const base = stripExtension(ctx.originalName);
-  const rendered = template
-    .replace(/\{name\}/g, base)
-    .replace(/\{n\}/g, String(Math.max(1, ctx.index)).padStart(pad, '0'))
-    .replace(/\{w\}/g, String(ctx.width))
-    .replace(/\{h\}/g, String(ctx.height));
+  const tokens: Record<string, string> = {
+    '{name}': base,
+    '{n}': String(Math.max(1, ctx.index)).padStart(pad, '0'),
+    '{w}': String(ctx.width),
+    '{h}': String(ctx.height),
+  };
+  const rendered = template.replace(/\{(?:name|n|w|h)\}/g, (token) => tokens[token]);
   const safe = sanitizeBaseName(rendered) || sanitizeBaseName(base) || 'image';
   return `${safe}.${ctx.ext}`;
 }
