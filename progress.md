@@ -33,6 +33,7 @@
 - [ ] 【低】站內 0 成本 SEO 與 AI 搜尋優化（`robots.txt`、`sitemap.xml`、`/llms.txt`、JSON-LD `WebApplication`、OG 分享圖）。
   - 功能分支已通過中繼資料、分享圖與靜態資產的本機讀回，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)。
 - [ ] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI。
+  - 功能分支已完成本機 Node 22／24 的單元與元件測試、失敗結束碼驗證，待 PR CI。見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)。
 
 ## 限制
 

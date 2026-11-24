@@ -4,6 +4,7 @@ import { FaviconWorkbench } from './components/FaviconWorkbench';
 import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
+import { isAcceptedImageFile } from './lib/image-file';
 import type {
   FaviconBundle,
   ImageTask,
@@ -386,9 +387,7 @@ export function App() {
   );
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
-    const incoming = Array.from(fileList).filter(
-      (f) => f.type.startsWith('image/') || /\.(jpe?g|png|webp|avif|gif|bmp|svg|ico)$/i.test(f.name),
-    );
+    const incoming = Array.from(fileList).filter(isAcceptedImageFile);
     if (incoming.length === 0) return;
 
     const created: ImageTask[] = incoming.map((file) => ({
