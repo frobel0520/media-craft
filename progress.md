@@ -1,6 +1,6 @@
 # media-craft Progress
 
-更新：2026-11-23（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
+更新：2026-11-24（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
 
 ## 現況
 
@@ -10,7 +10,7 @@
     - 8 種圖片格式偵測與標頭尺寸解析（JPEG / PNG / WebP / AVIF / GIF / BMP / SVG / ICO）。
     - TIFF/EXIF/GPS 隱私掃描與 JPEG/PNG/WebP 無損二進位去 EXIF。
     - 純 Rust 編碼器：24-bit Windows BMP、PNG-in-ICO（`≤ 256px`）、16-bit PCM WAV、IEEE 802.3 CRC-32 ZIP。
-    - SVG 安全清理與最佳化（`svg.rs`，分支 `feature/20261123-svg-cleaner`，尚未合併）。
+    - SVG 安全清理與最佳化（`svg.rs`），已透過 [PR #13](https://github.com/frobel0520/media-craft/pull/13) 合併並部署。
   - `crates/media-wasm`：極輕量 `wasm32-unknown-unknown` 執行檔，透過專屬 Web Worker 執行。
 - **Web 工作台與視覺系統（`web/`）**：
   - **GCP × iOS 視覺設計系統**（見 [`docs/04-ui-design-system.md`](docs/04-ui-design-system.md)）：`系統 / 淺色 / 深色` 三段式主題切換（預設跟隨系統）、多彩科技光圈（Prismatic Tech Aperture）Brand Icon 與全套書籤／主畫面縮圖（`favicon.svg`、`apple-touch-icon.png`、`icon-512.png`、`site.webmanifest`）。
@@ -28,7 +28,7 @@
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [x] 【中】圖片工作台進階編輯（智慧置中裁切比例、90° 旋轉與水平／垂直翻轉、自訂輸出檔名規則、批次進度條與中止鈕）。
 - [x] 【低】Favicon／PWA 圖示組產生器（已合併，見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)）。
-- [x] 【低】SVG 清理工作台（已合併至 `main`，Rust `svg.rs` 單元測試全過）。
+- [x] 【低】SVG 清理工作台：[正式部署](https://github.com/frobel0520/media-craft/actions/runs/45103253934) 成功，Rust 單元測試與 Clippy 由 CI 通過。2026-11-24 正式站 Chromium（375px、1280px）確認可預覽與下載，輸出可重新解析、保留 viewBox、移除中繼資料及外部引用；預覽 0 外部請求、0 CSP 違規，兩種寬度均無橫向溢出。WASM 由約 74 KB 增為約 94 KB。
 - [x] 【低】站內 0 成本 SEO 與 AI 搜尋優化（已合併，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)）。
 - [x] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI（已合併，見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)）。
 - [ ] 【低】擴充其餘 Phase 2 多媒體模組（GIF 最佳化、音訊輕量剪輯；評估 HEIC 按需懶載入）。
