@@ -28,6 +28,7 @@
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [ ] 【中】圖片工作台進階編輯（裁切／90° 旋轉與翻轉、自訂輸出檔名規則、批次進度條與取消鈕；評估 HEIC 按需懶載入）。
 - [ ] 【低】擴充其餘 Phase 2 多媒體模組（Favicon／PWA 圖示組產生器、GIF 最佳化、音訊輕量剪輯）。
+  - Favicon／PWA 圖示組在功能分支完成本機雙寬驗收，待審。見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)。
 - [ ] 【低】SVG 清理工作台（`feature/20261123-svg-cleaner`）：Rust `svg.rs` 8 項單元測試與瀏覽器惡意樣本驗證通過（輸出可重新解析、保留 viewBox、預覽 0 外部請求、0 CSP 違規）；待 PR 合併部署後在正式站實測。WASM 由約 74 KB 增為約 94 KB。
 - [ ] 【低】站內 0 成本 SEO 與 AI 搜尋優化（`robots.txt`、`sitemap.xml`、`/llms.txt`、JSON-LD `WebApplication`、OG 分享圖）。
 - [ ] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI。
