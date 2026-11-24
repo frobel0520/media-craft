@@ -27,6 +27,7 @@
 - [x] 【中】UI 視覺定調與工作台骨架（GCP × iOS 設計系統、系統預設主題、多彩科技光圈 Icon、Canva × Photoshop 單層頂欄與可收合側邊欄）。
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [x] 【中】圖片工作台進階編輯（智慧置中裁切比例、90° 旋轉與水平／垂直翻轉、自訂輸出檔名規則、批次進度條與中止鈕）。
+  - 原檔名保留與批次失敗後重試已補回歸，見 [圖片批次回復驗收](docs/evidence/image-batch-recovery-20261124.md)。
 - [x] 【低】Favicon／PWA 圖示組產生器（已合併，見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)）。
 - [x] 【低】SVG 清理工作台：[正式部署](https://github.com/frobel0520/media-craft/actions/runs/45103253934) 成功，Rust 單元測試與 Clippy 由 CI 通過。2026-11-24 正式站 Chromium（375px、1280px）確認可預覽與下載，輸出可重新解析、保留 viewBox、移除中繼資料及外部引用；預覽 0 外部請求、0 CSP 違規，兩種寬度均無橫向溢出。WASM 由約 74 KB 增為約 94 KB。
 - [x] 【低】站內 0 成本 SEO 與 AI 搜尋優化（已合併，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)）。
