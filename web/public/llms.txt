@@ -1,0 +1,6 @@
+# media-craft
+
+> 瀏覽器本地多媒體工作台，檔案處理在使用者裝置上執行。
+
+- [首頁與工具](https://media-craft.pages.dev/)：圖片壓縮、圖片格式轉換、無損去 EXIF、批次 ZIP、影片轉檔與抽音、SVG 清理。
+- [Sitemap](https://media-craft.pages.dev/sitemap.xml)：正式站目前的公開入口。

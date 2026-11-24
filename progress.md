@@ -28,9 +28,12 @@
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [ ] 【中】圖片工作台進階編輯（分支 `feature/20261123-image-edit-batch`，PR 待審）：置中裁切比例、90° 旋轉與水平／垂直翻轉、輸出檔名規則（`{name}`／`{n}`／`{w}`／`{h}`）、批次進度條與取消後重試；標記圖像素、命名、ZIP 與手機寬度驗證見 [`docs/evidence/image-edit-batch-20261123.md`](docs/evidence/image-edit-batch-20261123.md)。HEIC 只做評估，建議 Safari 原生優先＋按需載入 libheif-js，未導入。合併部署後要在正式站重測效能。
 - [ ] 【低】擴充其餘 Phase 2 多媒體模組（Favicon／PWA 圖示組產生器、GIF 最佳化、音訊輕量剪輯）。
+  - Favicon／PWA 圖示組在功能分支完成本機雙寬驗收，待審。見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)。
 - [ ] 【低】SVG 清理工作台（`feature/20261123-svg-cleaner`）：Rust `svg.rs` 8 項單元測試與瀏覽器惡意樣本驗證通過（輸出可重新解析、保留 viewBox、預覽 0 外部請求、0 CSP 違規）；待 PR 合併部署後在正式站實測。WASM 由約 74 KB 增為約 94 KB。
 - [ ] 【低】站內 0 成本 SEO 與 AI 搜尋優化（`robots.txt`、`sitemap.xml`、`/llms.txt`、JSON-LD `WebApplication`、OG 分享圖）。
+  - 功能分支已通過中繼資料、分享圖與靜態資產的本機讀回，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)。
 - [ ] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI。
+  - 功能分支已完成本機 Node 22／24 的單元與元件測試、失敗結束碼驗證，待 PR CI。見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)。
 
 ## 限制
 

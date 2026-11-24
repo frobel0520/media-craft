@@ -74,6 +74,7 @@ export type WorkerRequest =
     }
   | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> }
   | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number }
+  | { type: 'favicon-bundle'; id: string; buffer: ArrayBuffer }
   | { type: 'svg-clean'; id: string; buffer: ArrayBuffer; collapseWhitespace: boolean };
 
 export type WorkerResponse =
@@ -93,8 +94,14 @@ export type WorkerResponse =
     }
   | { type: 'zipped'; id: string; buffer: ArrayBuffer }
   | { type: 'wav-encoded'; id: string; buffer: ArrayBuffer }
+  | { type: 'favicon-generated'; id: string; bundle: FaviconBundle }
   | { type: 'svg-cleaned'; id: string; buffer: ArrayBuffer; report: SvgCleanReport }
   | { type: 'error'; id: string; message: string };
+
+export interface FaviconBundle {
+  files: Array<{ name: string; size: number; type: string; buffer: ArrayBuffer }>;
+  zip: ArrayBuffer;
+}
 
 /** Report produced by the Rust SVG sanitizer (`media_core::svg`). */
 export interface SvgCleanReport {
