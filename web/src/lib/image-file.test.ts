@@ -32,6 +32,16 @@ describe('computeCropRect', () => {
 });
 
 describe('formatOutputFileName', () => {
+  it('preserves literal template and replacement syntax from the original file name', () => {
+    expect(
+      formatOutputFileName('summer{index}$&$$.jpg', 'webp', '{name}-{index}', {
+        width: 1280,
+        height: 720,
+        index: 3,
+      }),
+    ).toBe('summer{index}$&$$-03.webp');
+  });
+
   it('expands template placeholders and pads index', () => {
     expect(
       formatOutputFileName('holiday.jpg', 'webp', '{name}_{width}x{height}_{index}', {

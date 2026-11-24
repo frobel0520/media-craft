@@ -53,11 +53,13 @@ export function formatOutputFileName(
   const base = originalName.replace(/\.[^/.]+$/, '') || 'image';
   const rawTemplate = template.trim() || '{name}-craft';
   const idx = String(meta.index ?? 1).padStart(2, '0');
-  const rendered = rawTemplate
-    .replaceAll('{name}', base)
-    .replaceAll('{width}', String(meta.width))
-    .replaceAll('{height}', String(meta.height))
-    .replaceAll('{index}', idx);
+  const tokens: Record<string, string> = {
+    '{name}': base,
+    '{width}': String(meta.width),
+    '{height}': String(meta.height),
+    '{index}': idx,
+  };
+  const rendered = rawTemplate.replace(/\{(?:name|width|height|index)\}/g, (token) => tokens[token]);
   const safe = rendered
     .replace(/[\\/:*?"<>|]+/g, '-')
     .replace(/\.+/g, '.')
