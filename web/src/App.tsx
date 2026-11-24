@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AudioWorkbench } from './components/AudioWorkbench';
 import { CompareModal } from './components/CompareModal';
 import { FaviconWorkbench } from './components/FaviconWorkbench';
 import { GifWorkbench } from './components/GifWorkbench';
@@ -29,18 +30,13 @@ const MAX_WIDTH_PRESETS = [
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-type ActiveModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif';
-
-const CORE_MODULES: Array<{ id: ActiveModuleId; label: string; title: string }> = [
+const CORE_MODULES: Array<{ id: ModuleId; label: string; title: string }> = [
   { id: 'image', label: '圖片壓縮與轉檔', title: '圖片工作台' },
   { id: 'video', label: '影片轉檔', title: '影片轉檔' },
   { id: 'svg', label: 'SVG 清理壓縮', title: 'SVG 清理' },
   { id: 'favicon', label: 'Favicon / PWA 圖示', title: 'Favicon 與 PWA 圖示' },
   { id: 'gif', label: 'GIF / 動圖最佳化', title: 'GIF 最佳化' },
-];
-
-const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, ActiveModuleId>; label: string; note: string }> = [
-  { id: 'audio', label: '音訊剪輯與轉檔', note: '規劃中' },
+  { id: 'audio', label: '音訊剪輯與轉檔', title: '音訊剪輯' },
 ];
 
 function ModuleIcon({ id }: { id: ModuleId }) {
@@ -124,7 +120,7 @@ function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
 }
 
 export function App() {
-  const [activeModule, setActiveModule] = useState<ActiveModuleId>('image');
+  const [activeModule, setActiveModule] = useState<ModuleId>('image');
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -691,24 +687,6 @@ export function App() {
             ))}
           </div>
 
-          <div className="sidebar__section">
-            <div className="sidebar__label">即將推出</div>
-            {UPCOMING_MODULES.map((mod) => (
-              <div
-                key={mod.id}
-                className="sidebar-item sidebar-item--soon"
-                aria-disabled="true"
-                title={`${mod.label}（${mod.note}）`}
-              >
-                <span className="sidebar-item__icon">
-                  <ModuleIcon id={mod.id} />
-                </span>
-                <span className="sidebar-item__text">{mod.label}</span>
-                <span className="sidebar-item__tag">{mod.note}</span>
-              </div>
-            ))}
-          </div>
-
           <div className="sidebar__foot">
             <div className="sidebar-trust" title="所有檔案皆於瀏覽器本地 Rust WASM 運算，絕不上傳">
               <span className={`dot ${wasmReady ? 'dot--ok' : ''}`} aria-hidden="true" />
@@ -730,6 +708,8 @@ export function App() {
               <GifWorkbench wasmReady={wasmReady} optimize={optimizeGif} />
             ) : activeModule === 'video' ? (
               <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
+            ) : activeModule === 'audio' ? (
+              <AudioWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
             ) : (
               <>
         <section className="hero">
