@@ -4,13 +4,15 @@ import { FaviconWorkbench } from './components/FaviconWorkbench';
 import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
-import { isAcceptedImageFile } from './lib/image-file';
+import { formatOutputFileName, isAcceptedImageFile } from './lib/image-file';
 import type {
+  CropRatio,
   FaviconBundle,
   ImageTask,
   OutputFormat,
   ProcessMode,
   ProcessOptions,
+  RotationDeg,
   SvgCleanReport,
   WorkerRequest,
   WorkerResponse,
@@ -131,15 +133,23 @@ export function App() {
   const [dragActive, setDragActive] = useState(false);
   const [compareId, setCompareId] = useState<string | null>(null);
   const [zipping, setZipping] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [options, setOptions] = useState<ProcessOptions>({
     mode: 'compress',
     outputFormat: 'image/webp',
     quality: 82,
     maxWidth: 0,
+    rotate: 0,
+    flipH: false,
+    flipV: false,
+    cropRatio: 'original',
+    fileNameTemplate: '{name}-craft',
   });
 
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const batchCancelRef = useRef(false);
+  const taskDoneResolversRef = useRef<Map<string, () => void>>(new Map());
   const wavPendingRef = useRef<
     Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
   >(new Map());
@@ -235,6 +245,11 @@ export function App() {
             };
           }),
         );
+        const doneResolve = taskDoneResolversRef.current.get(msg.id);
+        if (doneResolve) {
+          taskDoneResolversRef.current.delete(msg.id);
+          doneResolve();
+        }
         return;
       }
       if (msg.type === 'svg-cleaned') {
@@ -314,6 +329,11 @@ export function App() {
             item.id === msg.id ? { ...item, status: 'error', error: msg.message } : item,
           ),
         );
+        const doneResolve = taskDoneResolversRef.current.get(msg.id);
+        if (doneResolve) {
+          taskDoneResolversRef.current.delete(msg.id);
+          doneResolve();
+        }
       }
     };
 
@@ -413,7 +433,7 @@ export function App() {
   }, []);
 
   const processTask = useCallback(
-    async (task: ImageTask, opts: ProcessOptions) => {
+    async (task: ImageTask, opts: ProcessOptions, index?: number) => {
       const worker = workerRef.current;
       if (!worker || !wasmReady) return;
 
@@ -421,23 +441,42 @@ export function App() {
         prev.map((item) => (item.id === task.id ? { ...item, status: 'processing', error: null } : item)),
       );
       const buffer = await task.file.arrayBuffer();
+      const donePromise = new Promise<void>((resolve) => {
+        taskDoneResolversRef.current.set(task.id, resolve);
+      });
       const req: WorkerRequest = {
         type: 'process',
         id: task.id,
         fileName: task.file.name,
         buffer,
         options: opts,
+        index,
       };
       worker.postMessage(req, [buffer]);
+      await donePromise;
     },
     [wasmReady],
   );
 
   const processAll = useCallback(async () => {
-    for (const task of tasks) {
-      await processTask(task, options);
+    if (tasks.length === 0) return;
+    batchCancelRef.current = false;
+    setBatchProgress({ done: 0, total: tasks.length });
+    try {
+      for (let i = 0; i < tasks.length; i++) {
+        if (batchCancelRef.current) break;
+        await processTask(tasks[i], options, i + 1);
+        setBatchProgress({ done: i + 1, total: tasks.length });
+      }
+    } finally {
+      setBatchProgress(null);
+      batchCancelRef.current = false;
     }
   }, [tasks, options, processTask]);
+
+  const cancelBatch = useCallback(() => {
+    batchCancelRef.current = true;
+  }, []);
 
   const removeTask = useCallback((id: string) => {
     setTasks((prev) => {
@@ -771,6 +810,122 @@ export function App() {
                   ))}
                 </select>
               </div>
+
+              <div className="field">
+                <label htmlFor="crop-ratio" className="field__label">
+                  智慧置中裁切比例
+                </label>
+                <select
+                  id="crop-ratio"
+                  className="field__input"
+                  value={options.cropRatio}
+                  onChange={(e) =>
+                    setOptions((prev) => ({ ...prev, cropRatio: e.target.value as CropRatio }))
+                  }
+                >
+                  <option value="original">維持原比例</option>
+                  <option value="1:1">1:1（正方形頭像／IG）</option>
+                  <option value="4:3">4:3（標準簡報／相片）</option>
+                  <option value="16:9">16:9（寬螢幕封面）</option>
+                  <option value="3:2">3:2（經典單眼相片）</option>
+                  <option value="9:16">9:16（直式短影音封面）</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <span className="field__label">
+                  旋轉與翻轉
+                  {options.rotate !== 0 || options.flipH || options.flipV
+                    ? `（${options.rotate}°${options.flipH ? ' · 水平翻轉' : ''}${options.flipV ? ' · 垂直翻轉' : ''}）`
+                    : ''}
+                </span>
+                <div className="transform-toolbar" role="group" aria-label="旋轉與翻轉">
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--compact"
+                    onClick={() =>
+                      setOptions((prev) => ({
+                        ...prev,
+                        rotate: (((prev.rotate + 270) % 360) as RotationDeg),
+                      }))
+                    }
+                    title="逆時針旋轉 90°"
+                  >
+                    ↺ 90°
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--compact"
+                    onClick={() =>
+                      setOptions((prev) => ({
+                        ...prev,
+                        rotate: (((prev.rotate + 90) % 360) as RotationDeg),
+                      }))
+                    }
+                    title="順時針旋轉 90°"
+                  >
+                    ↻ 90°
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn--secondary btn--compact ${options.flipH ? 'btn--active' : ''}`}
+                    aria-pressed={options.flipH}
+                    onClick={() => setOptions((prev) => ({ ...prev, flipH: !prev.flipH }))}
+                    title="水平翻轉"
+                  >
+                    ⇄ 水平
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn--secondary btn--compact ${options.flipV ? 'btn--active' : ''}`}
+                    aria-pressed={options.flipV}
+                    onClick={() => setOptions((prev) => ({ ...prev, flipV: !prev.flipV }))}
+                    title="垂直翻轉"
+                  >
+                    ⇅ 垂直
+                  </button>
+                  {(options.rotate !== 0 || options.flipH || options.flipV) && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--compact"
+                      onClick={() =>
+                        setOptions((prev) => ({ ...prev, rotate: 0, flipH: false, flipV: false }))
+                      }
+                    >
+                      重設
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="filename-template" className="field__label">
+                  自訂檔名規則
+                </label>
+                <input
+                  id="filename-template"
+                  type="text"
+                  className="field__input"
+                  value={options.fileNameTemplate}
+                  placeholder="{name}-craft"
+                  onChange={(e) =>
+                    setOptions((prev) => ({ ...prev, fileNameTemplate: e.target.value }))
+                  }
+                />
+                <span className="field__hint">
+                  可用 {'{name}'} {'{width}'} {'{height}'} {'{index}'} · 預覽：
+                  {formatOutputFileName(
+                    'photo.jpg',
+                    options.outputFormat === 'image/jpeg'
+                      ? 'jpg'
+                      : options.outputFormat === 'image/x-icon'
+                        ? 'ico'
+                        : options.outputFormat.replace('image/', ''),
+                    options.fileNameTemplate,
+                    { width: 1280, height: 720, index: 1 },
+                  )}
+                </span>
+              </div>
             </div>
           )}
         </section>
@@ -834,26 +989,53 @@ export function App() {
                 <button
                   type="button"
                   className="btn btn--primary"
-                  disabled={!wasmReady}
+                  disabled={!wasmReady || batchProgress !== null}
                   onClick={() => void processAll()}
                 >
-                  全部處理（{tasks.length}）
+                  {batchProgress
+                    ? `處理中 ${batchProgress.done}/${batchProgress.total}…`
+                    : `全部處理（${tasks.length}）`}
                 </button>
+                {batchProgress && (
+                  <button type="button" className="btn btn--ghost" onClick={cancelBatch}>
+                    中止
+                  </button>
+                )}
                 {summary.doneCount >= 2 && (
                   <button
                     type="button"
                     className="btn btn--secondary"
-                    disabled={zipping}
+                    disabled={zipping || batchProgress !== null}
                     onClick={() => void downloadBatchZip()}
                   >
                     {zipping ? 'Rust 打包中…' : `打包下載 ZIP（${summary.doneCount}）`}
                   </button>
                 )}
-                <button type="button" className="btn btn--ghost" onClick={clearAll}>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={batchProgress !== null}
+                  onClick={clearAll}
+                >
                   清空
                 </button>
               </div>
             </div>
+
+            {batchProgress && (
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-valuenow={Math.round((batchProgress.done / batchProgress.total) * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="progress-track__fill"
+                  style={{ width: `${Math.round((batchProgress.done / batchProgress.total) * 100)}%` }}
+                />
+              </div>
+            )}
 
             <ul className="task-list">
               {tasks.map((task) => {

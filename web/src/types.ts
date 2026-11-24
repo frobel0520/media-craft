@@ -7,6 +7,8 @@ export type OutputFormat =
   | 'image/x-icon';
 
 export type ProcessMode = 'compress' | 'lossless-strip';
+export type RotationDeg = 0 | 90 | 180 | 270;
+export type CropRatio = 'original' | '1:1' | '4:3' | '16:9' | '3:2' | '9:16';
 
 export interface InspectReport {
   format: 'jpeg' | 'png' | 'webp' | 'avif' | 'gif' | 'bmp' | 'svg' | 'ico' | 'unknown';
@@ -33,6 +35,11 @@ export interface ProcessOptions {
   outputFormat: OutputFormat;
   quality: number; // 10..100
   maxWidth: number; // 0 = keep original
+  rotate: RotationDeg;
+  flipH: boolean;
+  flipV: boolean;
+  cropRatio: CropRatio;
+  fileNameTemplate: string;
 }
 
 export interface ProcessedOutput {
@@ -59,7 +66,7 @@ export interface ImageTask {
 export type WorkerRequest =
   | { type: 'init'; wasmUrl: string }
   | { type: 'inspect'; id: string; buffer: ArrayBuffer }
-  | { type: 'process'; id: string; fileName: string; buffer: ArrayBuffer; options: ProcessOptions }
+  | { type: 'process'; id: string; fileName: string; buffer: ArrayBuffer; options: ProcessOptions; index?: number }
   | { type: 'zip'; id: string; files: Array<{ name: string; buffer: ArrayBuffer }> }
   | { type: 'encode-wav'; id: string; pcmBuffer: ArrayBuffer; sampleRate: number; channels: number }
   | { type: 'favicon-bundle'; id: string; buffer: ArrayBuffer }
