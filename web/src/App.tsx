@@ -146,7 +146,12 @@ export function App() {
   const workerRef = useRef<Worker | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const batchCancelRef = useRef(false);
-  const taskDoneResolversRef = useRef<Map<string, () => void>>(new Map());
+  const nextImageRequest = useRef(0);
+  const pendingImageTasks = useRef(new Map<string, {
+    requestId: string;
+    done: Promise<void>;
+    finish: () => void;
+  }>());
   const wavPendingRef = useRef<
     Map<string, { resolve: (buf: ArrayBuffer) => void; reject: (err: Error) => void }>
   >(new Map());
@@ -200,6 +205,14 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mobileNavOpen]);
 
+  const failImageTask = useCallback((id: string, error: string, onlyIdle = false) => {
+    setTasks((prev) => prev.map((task) =>
+      task.id === id && (!onlyIdle || task.status === 'idle')
+        ? { ...task, status: 'error', error }
+        : task,
+    ));
+  }, []);
+
   useEffect(() => {
     const worker = new Worker(new URL('./workers/media.worker.ts', import.meta.url), {
       type: 'module',
@@ -207,26 +220,43 @@ export function App() {
     workerRef.current = worker;
 
     const wasmUrl = new URL(`${import.meta.env.BASE_URL}wasm/media_wasm.wasm`, window.location.href).href;
+    const pending = pendingImageTasks.current;
+    let initialized = false;
+
+    const failPendingImages = (error: string) => {
+      if (!initialized) setWasmError(error);
+      for (const [id, operation] of pending) {
+        failImageTask(id, error);
+        operation.finish();
+      }
+    };
+    worker.addEventListener('error', () => failPendingImages('圖片處理 Worker 發生錯誤，請重試'));
+    worker.addEventListener('messageerror', () => failPendingImages('無法讀取圖片處理結果，請重試'));
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const msg = event.data;
       if (msg.type === 'ready') {
+        initialized = true;
         setWasmReady(true);
         setWasmError(null);
         return;
       }
       if (msg.type === 'inspected') {
+        const id = msg.id.slice('inspect:'.length);
         setTasks((prev) =>
-          prev.map((item) => (item.id === msg.id ? { ...item, beforeReport: msg.report } : item)),
+          prev.map((item) => (item.id === id ? { ...item, beforeReport: msg.report } : item)),
         );
         return;
       }
       if (msg.type === 'processed') {
+        const id = msg.id.split(':', 1)[0];
+        const operation = pending.get(id);
+        if (operation?.requestId !== msg.id) return;
         const blob = new Blob([msg.buffer], { type: msg.mimeType });
         const url = URL.createObjectURL(blob);
         setTasks((prev) =>
           prev.map((item) => {
-            if (item.id !== msg.id) return item;
+            if (item.id !== id) return item;
             if (item.output?.url) URL.revokeObjectURL(item.output.url);
             return {
               ...item,
@@ -246,11 +276,7 @@ export function App() {
             };
           }),
         );
-        const doneResolve = taskDoneResolversRef.current.get(msg.id);
-        if (doneResolve) {
-          taskDoneResolversRef.current.delete(msg.id);
-          doneResolve();
-        }
+        operation.finish();
         return;
       }
       if (msg.type === 'svg-cleaned') {
@@ -337,15 +363,15 @@ export function App() {
           wavPending.reject(new Error(msg.message));
           return;
         }
-        setTasks((prev) =>
-          prev.map((item) =>
-            item.id === msg.id ? { ...item, status: 'error', error: msg.message } : item,
-          ),
-        );
-        const doneResolve = taskDoneResolversRef.current.get(msg.id);
-        if (doneResolve) {
-          taskDoneResolversRef.current.delete(msg.id);
-          doneResolve();
+        if (msg.id.startsWith('inspect:')) {
+          failImageTask(msg.id.slice('inspect:'.length), msg.message, true);
+          return;
+        }
+        const id = msg.id.split(':', 1)[0];
+        const operation = pending.get(id);
+        if (operation?.requestId === msg.id) {
+          failImageTask(id, msg.message);
+          operation.finish();
         }
       }
     };
@@ -356,12 +382,13 @@ export function App() {
     return () => {
       worker.terminate();
       workerRef.current = null;
+      for (const operation of pending.values()) operation.finish();
       for (const task of tasksRef.current) {
         URL.revokeObjectURL(task.previewUrl);
         if (task.output?.url) URL.revokeObjectURL(task.output.url);
       }
     };
-  }, []);
+  }, [failImageTask]);
 
   const encodeWavViaWorker = useCallback(
     (pcmBuffer: ArrayBuffer, sampleRate: number, channels: number): Promise<ArrayBuffer> => {
@@ -450,36 +477,64 @@ export function App() {
     if (!worker) return;
 
     for (const item of created) {
-      const buffer = await item.file.arrayBuffer();
-      const req: WorkerRequest = { type: 'inspect', id: item.id, buffer };
-      worker.postMessage(req, [buffer]);
+      try {
+        const buffer = await item.file.arrayBuffer();
+        const req: WorkerRequest = { type: 'inspect', id: `inspect:${item.id}`, buffer };
+        worker.postMessage(req, [buffer]);
+      } catch {
+        failImageTask(item.id, '無法讀取或檢查圖片，請重試', true);
+      }
     }
-  }, []);
+  }, [failImageTask]);
 
   const processTask = useCallback(
     async (task: ImageTask, opts: ProcessOptions, index?: number) => {
       const worker = workerRef.current;
       if (!worker || !wasmReady) return;
+      const pending = pendingImageTasks.current;
+      const existing = pending.get(task.id);
+      if (existing) return existing.done;
 
       setTasks((prev) =>
         prev.map((item) => (item.id === task.id ? { ...item, status: 'processing', error: null } : item)),
       );
-      const buffer = await task.file.arrayBuffer();
-      const donePromise = new Promise<void>((resolve) => {
-        taskDoneResolversRef.current.set(task.id, resolve);
+      const requestId = `${task.id}:${++nextImageRequest.current}`;
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => {
+        resolveDone = resolve;
       });
-      const req: WorkerRequest = {
-        type: 'process',
-        id: task.id,
-        fileName: task.file.name,
-        buffer,
-        options: opts,
-        index,
+      const operation = {
+        requestId,
+        done,
+        finish() {
+          pending.delete(task.id);
+          resolveDone();
+        },
       };
-      worker.postMessage(req, [buffer]);
-      await donePromise;
+      pending.set(task.id, operation);
+
+      try {
+        const buffer = await task.file.arrayBuffer();
+        if (pending.get(task.id) === operation) {
+          const req: WorkerRequest = {
+            type: 'process',
+            id: requestId,
+            fileName: task.file.name,
+            buffer,
+            options: opts,
+            index,
+          };
+          worker.postMessage(req, [buffer]);
+        }
+      } catch {
+        if (pending.get(task.id) === operation) {
+          failImageTask(task.id, '無法讀取或送出圖片，請重試');
+          operation.finish();
+        }
+      }
+      return done;
     },
-    [wasmReady],
+    [failImageTask, wasmReady],
   );
 
   const processAll = useCallback(async () => {
