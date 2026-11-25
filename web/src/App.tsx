@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioWorkbench } from './components/AudioWorkbench';
 import { CompareModal } from './components/CompareModal';
 import { FaviconWorkbench } from './components/FaviconWorkbench';
+import { GifWorkbench } from './components/GifWorkbench';
 import { SvgWorkbench } from './components/SvgWorkbench';
 import { VideoWorkbench } from './components/VideoWorkbench';
 import { formatBytes, formatSavings } from './lib/format';
@@ -19,6 +20,8 @@ import type {
   WorkerResponse,
 } from './types';
 
+const GIF_WORKER_TIMEOUT_MS = 30_000;
+
 const MAX_WIDTH_PRESETS = [
   { label: '維持原尺寸', value: 0 },
   { label: '最大 2560 px', value: 2560 },
@@ -29,18 +32,13 @@ const MAX_WIDTH_PRESETS = [
 
 type ModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'gif' | 'audio';
 
-type ActiveModuleId = 'image' | 'video' | 'svg' | 'favicon' | 'audio';
-
-const CORE_MODULES: Array<{ id: ActiveModuleId; label: string; title: string }> = [
+const CORE_MODULES: Array<{ id: ModuleId; label: string; title: string }> = [
   { id: 'image', label: '圖片壓縮與轉檔', title: '圖片工作台' },
   { id: 'video', label: '影片轉檔', title: '影片轉檔' },
   { id: 'svg', label: 'SVG 清理壓縮', title: 'SVG 清理' },
   { id: 'favicon', label: 'Favicon / PWA 圖示', title: 'Favicon 與 PWA 圖示' },
+  { id: 'gif', label: 'GIF / 動圖最佳化', title: 'GIF 最佳化' },
   { id: 'audio', label: '音訊剪輯與轉檔', title: '音訊剪輯' },
-];
-
-const UPCOMING_MODULES: Array<{ id: Exclude<ModuleId, ActiveModuleId>; label: string; note: string }> = [
-  { id: 'gif', label: 'GIF / 動圖最佳化', note: '規劃中' },
 ];
 
 function ModuleIcon({ id }: { id: ModuleId }) {
@@ -124,7 +122,7 @@ function resolveTheme(pref: ThemePreference): 'light' | 'dark' {
 }
 
 export function App() {
-  const [activeModule, setActiveModule] = useState<ActiveModuleId>('image');
+  const [activeModule, setActiveModule] = useState<ModuleId>('image');
   const [theme, setTheme] = useState<ThemePreference>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(getInitialSidebarCollapsed);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -167,6 +165,10 @@ export function App() {
   >(new Map());
   const faviconPendingRef = useRef(new Map<string, {
     resolve: (bundle: FaviconBundle) => void;
+    reject: (error: Error) => void;
+  }>());
+  const gifPendingRef = useRef(new Map<string, {
+    resolve: (buffer: ArrayBuffer) => void;
     reject: (error: Error) => void;
   }>());
   const tasksRef = useRef<ImageTask[]>([]);
@@ -221,6 +223,10 @@ export function App() {
 
     const wasmUrl = new URL(`${import.meta.env.BASE_URL}wasm/media_wasm.wasm`, window.location.href).href;
     const pending = pendingImageTasks.current;
+    const pendingGifs = gifPendingRef.current;
+    const failPendingGifs = (message: string) => {
+      for (const operation of pendingGifs.values()) operation.reject(new Error(message));
+    };
     let initialized = false;
 
     const failPendingImages = (error: string) => {
@@ -230,8 +236,14 @@ export function App() {
         operation.finish();
       }
     };
-    worker.addEventListener('error', () => failPendingImages('圖片處理 Worker 發生錯誤，請重試'));
-    worker.addEventListener('messageerror', () => failPendingImages('無法讀取圖片處理結果，請重試'));
+    worker.addEventListener('error', () => {
+      failPendingImages('圖片處理 Worker 發生錯誤，請重試');
+      failPendingGifs('GIF 處理 Worker 發生錯誤，請重試');
+    });
+    worker.addEventListener('messageerror', () => {
+      failPendingImages('無法讀取圖片處理結果，請重試');
+      failPendingGifs('無法讀取 GIF 處理結果，請重試');
+    });
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const msg = event.data;
@@ -318,6 +330,10 @@ export function App() {
         pending?.resolve(msg.bundle);
         return;
       }
+      if (msg.type === 'gif-optimized') {
+        pendingGifs.get(msg.id)?.resolve(msg.buffer);
+        return;
+      }
       if (msg.type === 'error') {
         if (msg.id === 'init') {
           setWasmError(msg.message);
@@ -331,6 +347,11 @@ export function App() {
         if (faviconPending) {
           faviconPendingRef.current.delete(msg.id);
           faviconPending.reject(new Error(msg.message));
+          return;
+        }
+        const gifPending = pendingGifs.get(msg.id);
+        if (gifPending) {
+          gifPending.reject(new Error(msg.message));
           return;
         }
         const svgPending = svgPendingRef.current.get(msg.id);
@@ -371,6 +392,7 @@ export function App() {
       worker.terminate();
       workerRef.current = null;
       for (const operation of pending.values()) operation.finish();
+      failPendingGifs('GIF 處理已停止，請重試');
       for (const task of tasksRef.current) {
         URL.revokeObjectURL(task.previewUrl);
         if (task.output?.url) URL.revokeObjectURL(task.output.url);
@@ -400,6 +422,40 @@ export function App() {
       faviconPendingRef.current.set(id, { resolve, reject });
       const request: WorkerRequest = { type: 'favicon-bundle', id, buffer };
       worker.postMessage(request, [buffer]);
+    });
+  }, []);
+
+  const optimizeGif = useCallback((buffer: ArrayBuffer): Promise<ArrayBuffer> => {
+    const worker = workerRef.current;
+    if (!worker) return Promise.reject(new Error('GIF 工具尚未就緒'));
+    const id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const pending = gifPendingRef.current;
+      const finish = () => {
+        window.clearTimeout(timeout);
+        pending.delete(id);
+      };
+      const fail = (error: Error) => {
+        finish();
+        reject(error);
+      };
+      const timeout = window.setTimeout(() => {
+        fail(new Error('GIF 處理逾時，請重試'));
+      }, GIF_WORKER_TIMEOUT_MS);
+      pending.set(id, {
+        resolve: (result) => {
+          finish();
+          resolve(result);
+        },
+        reject: fail,
+      });
+
+      try {
+        const request: WorkerRequest = { type: 'gif-optimize', id, buffer };
+        worker.postMessage(request, [buffer]);
+      } catch {
+        fail(new Error('無法送出 GIF，請重試'));
+      }
     });
   }, []);
 
@@ -719,24 +775,6 @@ export function App() {
             ))}
           </div>
 
-          <div className="sidebar__section">
-            <div className="sidebar__label">即將推出</div>
-            {UPCOMING_MODULES.map((mod) => (
-              <div
-                key={mod.id}
-                className="sidebar-item sidebar-item--soon"
-                aria-disabled="true"
-                title={`${mod.label}（${mod.note}）`}
-              >
-                <span className="sidebar-item__icon">
-                  <ModuleIcon id={mod.id} />
-                </span>
-                <span className="sidebar-item__text">{mod.label}</span>
-                <span className="sidebar-item__tag">{mod.note}</span>
-              </div>
-            ))}
-          </div>
-
           <div className="sidebar__foot">
             <div className="sidebar-trust" title="所有檔案皆於瀏覽器本地 Rust WASM 運算，絕不上傳">
               <span className={`dot ${wasmReady ? 'dot--ok' : ''}`} aria-hidden="true" />
@@ -754,6 +792,8 @@ export function App() {
               <SvgWorkbench wasmReady={wasmReady} cleanSvg={cleanSvgViaWorker} buildZip={zipViaWorker} />
             ) : activeModule === 'favicon' ? (
               <FaviconWorkbench wasmReady={wasmReady} generate={generateFavicon} />
+            ) : activeModule === 'gif' ? (
+              <GifWorkbench wasmReady={wasmReady} optimize={optimizeGif} />
             ) : activeModule === 'video' ? (
               <VideoWorkbench wasmReady={wasmReady} encodeWav={encodeWavViaWorker} />
             ) : activeModule === 'audio' ? (

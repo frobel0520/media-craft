@@ -4,6 +4,7 @@ pub mod crc32;
 pub mod encode;
 pub mod exif;
 pub mod format;
+pub mod gif;
 pub mod json;
 pub mod strip;
 pub mod svg;

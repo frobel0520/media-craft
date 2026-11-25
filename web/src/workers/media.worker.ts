@@ -235,6 +235,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
 
+    if (req.type === 'gif-optimize') {
+      const buffer = engine.optimizeGif(new Uint8Array(req.buffer)).slice().buffer;
+      post({ type: 'gif-optimized', id: req.id, buffer }, [buffer]);
+      return;
+    }
+
     if (req.type === 'svg-clean') {
       const { svg, report } = engine.cleanSvg(new Uint8Array(req.buffer), req.collapseWhitespace);
       const svgBuffer = svg.slice().buffer;
