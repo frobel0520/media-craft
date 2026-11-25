@@ -20,6 +20,8 @@ import type {
   WorkerResponse,
 } from './types';
 
+const GIF_WORKER_TIMEOUT_MS = 30_000;
+
 const MAX_WIDTH_PRESETS = [
   { label: '維持原尺寸', value: 0 },
   { label: '最大 2560 px', value: 2560 },
@@ -221,6 +223,10 @@ export function App() {
 
     const wasmUrl = new URL(`${import.meta.env.BASE_URL}wasm/media_wasm.wasm`, window.location.href).href;
     const pending = pendingImageTasks.current;
+    const pendingGifs = gifPendingRef.current;
+    const failPendingGifs = (message: string) => {
+      for (const operation of pendingGifs.values()) operation.reject(new Error(message));
+    };
     let initialized = false;
 
     const failPendingImages = (error: string) => {
@@ -230,8 +236,14 @@ export function App() {
         operation.finish();
       }
     };
-    worker.addEventListener('error', () => failPendingImages('圖片處理 Worker 發生錯誤，請重試'));
-    worker.addEventListener('messageerror', () => failPendingImages('無法讀取圖片處理結果，請重試'));
+    worker.addEventListener('error', () => {
+      failPendingImages('圖片處理 Worker 發生錯誤，請重試');
+      failPendingGifs('GIF 處理 Worker 發生錯誤，請重試');
+    });
+    worker.addEventListener('messageerror', () => {
+      failPendingImages('無法讀取圖片處理結果，請重試');
+      failPendingGifs('無法讀取 GIF 處理結果，請重試');
+    });
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const msg = event.data;
@@ -319,9 +331,7 @@ export function App() {
         return;
       }
       if (msg.type === 'gif-optimized') {
-        const pending = gifPendingRef.current.get(msg.id);
-        gifPendingRef.current.delete(msg.id);
-        pending?.resolve(msg.buffer);
+        pendingGifs.get(msg.id)?.resolve(msg.buffer);
         return;
       }
       if (msg.type === 'error') {
@@ -339,9 +349,8 @@ export function App() {
           faviconPending.reject(new Error(msg.message));
           return;
         }
-        const gifPending = gifPendingRef.current.get(msg.id);
+        const gifPending = pendingGifs.get(msg.id);
         if (gifPending) {
-          gifPendingRef.current.delete(msg.id);
           gifPending.reject(new Error(msg.message));
           return;
         }
@@ -383,6 +392,7 @@ export function App() {
       worker.terminate();
       workerRef.current = null;
       for (const operation of pending.values()) operation.finish();
+      failPendingGifs('GIF 處理已停止，請重試');
       for (const task of tasksRef.current) {
         URL.revokeObjectURL(task.previewUrl);
         if (task.output?.url) URL.revokeObjectURL(task.output.url);
@@ -420,9 +430,32 @@ export function App() {
     if (!worker) return Promise.reject(new Error('GIF 工具尚未就緒'));
     const id = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      gifPendingRef.current.set(id, { resolve, reject });
-      const request: WorkerRequest = { type: 'gif-optimize', id, buffer };
-      worker.postMessage(request, [buffer]);
+      const pending = gifPendingRef.current;
+      const finish = () => {
+        window.clearTimeout(timeout);
+        pending.delete(id);
+      };
+      const fail = (error: Error) => {
+        finish();
+        reject(error);
+      };
+      const timeout = window.setTimeout(() => {
+        fail(new Error('GIF 處理逾時，請重試'));
+      }, GIF_WORKER_TIMEOUT_MS);
+      pending.set(id, {
+        resolve: (result) => {
+          finish();
+          resolve(result);
+        },
+        reject: fail,
+      });
+
+      try {
+        const request: WorkerRequest = { type: 'gif-optimize', id, buffer };
+        worker.postMessage(request, [buffer]);
+      } catch {
+        fail(new Error('無法送出 GIF，請重試'));
+      }
     });
   }, []);
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { InspectReport, WorkerRequest, WorkerResponse } from './types';
@@ -90,4 +90,65 @@ it.each(['read', 'send', 'worker'] as const)('allows batch retry after a %s fail
   fireEvent.click(screen.getByRole('button', { name: /全部處理/ }));
   await screen.findByText(/已完成 2 張/);
   expect(dispatched.slice(-2)).toEqual(['first.png', 'second.png']);
+});
+
+it.each([
+  ['send', '無法送出 GIF，請重試'],
+  ['error', 'GIF 處理 Worker 發生錯誤，請重試'],
+  ['messageerror', '無法讀取 GIF 處理結果，請重試'],
+  ['timeout', 'GIF 處理逾時，請重試'],
+] as const)('allows a GIF retry after a %s failure', async (failure, message) => {
+  let attempts = 0;
+
+  class GifWorker extends EventTarget {
+    onmessage: ((message: MessageEvent<WorkerResponse>) => void) | null = null;
+
+    postMessage(request: WorkerRequest): void {
+      if (request.type === 'init') this.reply({ type: 'ready' });
+      if (request.type !== 'gif-optimize') return;
+
+      if (++attempts === 1) {
+        if (failure === 'send') throw new DOMException('fixture send failure', 'DataCloneError');
+        if (failure !== 'timeout') queueMicrotask(() => this.dispatchEvent(new Event(failure)));
+        return;
+      }
+
+      this.reply({ type: 'gif-optimized', id: request.id, buffer: new ArrayBuffer(2) });
+    }
+
+    reply(message: WorkerResponse): void {
+      queueMicrotask(() => this.onmessage?.(new MessageEvent('message', { data: message })));
+    }
+
+    terminate(): void {}
+  }
+
+  vi.stubGlobal('Worker', GifWorker);
+  render(<App />);
+  await screen.findByText(/Rust WASM 就緒/);
+  fireEvent.click(screen.getByRole('button', { name: 'GIF / 動圖最佳化' }));
+  const panel = screen.getByRole('region', { name: 'GIF 最佳化' });
+  const picker = panel.querySelector('input')!;
+  const file = Object.assign(new File(['test'], 'fixture.gif', { type: 'image/gif' }), {
+    arrayBuffer: async () => new ArrayBuffer(4),
+  });
+
+  if (failure === 'timeout') {
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(picker, { target: { files: [file] } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    } finally {
+      vi.useRealTimers();
+    }
+  } else {
+    fireEvent.change(picker, { target: { files: [file] } });
+  }
+
+  expect((await screen.findByRole('alert')).textContent).toBe(message);
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: '選擇 GIF' }).disabled).toBe(false);
+  fireEvent.change(picker, { target: { files: [file] } });
+  await screen.findByRole('button', { name: '下載最佳化 GIF' });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(attempts).toBe(2);
 });

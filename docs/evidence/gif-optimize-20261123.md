@@ -6,3 +6,5 @@
 - 重傳已精簡檔提供原檔下載。截斷檔會顯示錯誤。兩種寬度未觀察到水平溢位、第三方請求、CSP 違規或頁面例外。
 - 從合成選檔到最佳化下載按鈕就緒，共 20 次，p50 18.7 ms、p95 47.9 ms，低於本機合成樣本的 1 秒 p95 門檻。
 - Clippy、`wasm32-unknown-unknown` release、TypeScript 與 SPA 建置通過。Rust workspace 21 項測試在 Node WASI 通過。Windows native linker 因缺 SDK 的 `kernel32.lib` 未能執行，正式環境與本機實體手機尚待驗。
+
+- 2026-11-25 補 GIF Worker 失敗恢復測試。模擬送出拋錯、error、messageerror 與無回覆逾時，確認重新選檔可完成。前端 18 項測試、型別檢查與建置通過。
