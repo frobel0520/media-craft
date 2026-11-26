@@ -40,4 +40,4 @@
 
 - 尚未完成實體手機（iOS Safari / Android Chrome）大圖／影片批次處理實測。
 - 影片轉檔方案 A 仰賴瀏覽器原生 `MediaRecorder` 與 `AudioContext` 解碼，尚不支援 MKV / AVI 等冷門容器。
-- `crates/media-core` 維持零外部相依；若未來模組（如 HEIC 或 FFmpeg.wasm）需引入外部相依，須先於 `docs/03-system-design.md` 記錄體積、授權與安全評估。
+- `crates/media-core` 維持零外部相依；若未來模組（如 HEIC 或 FFmpeg.wasm）需引入外部相依，須先於 `docs/03-system-design.md` 記錄體積、授權與安全評估。已用合成 HEIC 確認目前 Chromium 的原生 Worker 解碼不支援該樣本，候選解碼器尚待選型。[可行性證據](docs/evidence/heic-feasibility-20261126.md)
