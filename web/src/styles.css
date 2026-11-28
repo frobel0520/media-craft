@@ -1106,7 +1106,16 @@ input[type='range']::-moz-range-thumb {
   }
 }
 
+.image-picker--mobile {
+  display: none;
+}
+
 @media (max-width: 760px) {
+  .image-picker--mobile {
+    display: inline-flex;
+    margin-top: 12px;
+  }
+
   .topbar__inner {
     padding: 0 12px;
   }

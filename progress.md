@@ -1,6 +1,6 @@
 # media-craft Progress
 
-更新：2026-11-24（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
+更新：2026-11-28（Asia/Taipei）。專案級別：**公開級**（100% 純靜態 Cloudflare Pages + Rust WebAssembly，零後端、零資料庫、零月費）。
 
 ## 現況
 
@@ -27,14 +27,14 @@
 - [x] 【中】UI 視覺定調與工作台骨架（GCP × iOS 設計系統、系統預設主題、多彩科技光圈 Icon、Canva × Photoshop 單層頂欄與可收合側邊欄）。
 - [x] 【中】圖片轉檔格式擴充（8 輸入 × 6 輸出）與影片轉檔工作台方案 A（MP4/WebM/MOV/OGV → WebM/MP4/WAV/封面圖）。
 - [x] 【中】圖片工作台進階編輯（智慧置中裁切比例、90° 旋轉與水平／垂直翻轉、自訂輸出檔名規則、批次進度條與中止鈕）。
-  - 原檔名保留與批次失敗後重試已補回歸，見 [圖片批次回復驗收](docs/evidence/image-batch-recovery-20261124.md)。
+- [x] 【中】圖片批次保留原檔名與失敗後重試已合併（[PR #23](https://github.com/frobel0520/media-craft/pull/23)，合併提交 `d201b75`，[CI 與部署](https://github.com/frobel0520/media-craft/actions/runs/45381455434) 成功），見[圖片批次回復驗收](docs/evidence/image-batch-recovery-20261124.md)；正式站與實體手機待複驗。
 - [x] 【低】Favicon／PWA 圖示組產生器（已合併，見 [圖示驗收](docs/evidence/favicon-pwa-20261123.md)）。
 - [x] 【低】SVG 清理工作台：[正式部署](https://github.com/frobel0520/media-craft/actions/runs/45103253934) 成功，Rust 單元測試與 Clippy 由 CI 通過。2026-11-24 正式站 Chromium（375px、1280px）確認可預覽與下載，輸出可重新解析、保留 viewBox、移除中繼資料及外部引用；預覽 0 外部請求、0 CSP 違規，兩種寬度均無橫向溢出。WASM 由約 74 KB 增為約 94 KB。
 - [x] 【低】站內 0 成本 SEO 與 AI 搜尋優化（已合併，見 [SEO 驗收](docs/evidence/static-seo-20261123.md)）。
 - [x] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI（已合併，見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)）。
-- [ ] 【低】擴充其餘 Phase 2 多媒體模組（GIF 最佳化、音訊輕量剪輯；評估 HEIC 按需懶載入）。
-  - GIF 最佳化在功能分支驗證影格、透明及時間一致，待審。見 [GIF 驗收](docs/evidence/gif-optimize-20261123.md)。
-  - 音訊區間試聽與 WAV 匯出在功能分支完成雙寬驗收，待審。見 [音訊剪輯驗收](docs/evidence/audio-clip-20261123.md)。
+- [x] 【低】GIF 最佳化已合併（[PR #18](https://github.com/frobel0520/media-craft/pull/18)，合併提交 `52481fa`，[CI 與部署](https://github.com/frobel0520/media-craft/actions/runs/45520788706) 成功），影格、透明與播放時間驗證見 [GIF 驗收](docs/evidence/gif-optimize-20261123.md)；正式環境與實體手機待驗。
+- [x] 【低】音訊區間試聽與 WAV 匯出已合併（[PR #19](https://github.com/frobel0520/media-craft/pull/19)，合併提交 `b180dfb`，[CI 與部署](https://github.com/frobel0520/media-craft/actions/runs/45326891372) 成功），見[音訊剪輯驗收](docs/evidence/audio-clip-20261123.md)；正式環境、實體手機與大型檔案待實測。
+- [ ] 【低】評估 Phase 2 的 HEIC 本機解碼與按需懶載入（可行性評估進行中，見 [PR #26](https://github.com/frobel0520/media-craft/pull/26)；候選解碼器尚未選型，未導入任何 codec）。
 
 ## 限制
 
