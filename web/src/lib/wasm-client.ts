@@ -14,6 +14,7 @@ interface MediaWasmExports {
   encode_bmp_wasm(ptr: number, len: number, width: number, height: number): number;
   encode_ico_wasm(ptr: number, len: number, width: number, height: number): number;
   encode_wav_wasm(ptr: number, len: number, sampleRate: number, channels: number): number;
+  optimize_gif_wasm(ptr: number, len: number): number;
   clean_svg_wasm(ptr: number, len: number, flags: number): number;
   svg_last_error(): number;
   svg_last_report(): number;
@@ -160,6 +161,16 @@ export class MediaWasmEngine {
       if (outLen === 0) {
         throw new Error('Rust WASM 封裝 WAV 音訊失敗');
       }
+      return this.readLastOutput();
+    } finally {
+      this.exports.dealloc(ptr, len);
+    }
+  }
+
+  optimizeGif(bytes: Uint8Array): Uint8Array {
+    const { ptr, len } = this.writeBytes(bytes);
+    try {
+      if (!this.exports.optimize_gif_wasm(ptr, len)) throw new Error('GIF 格式不完整或超過處理上限');
       return this.readLastOutput();
     } finally {
       this.exports.dealloc(ptr, len);
