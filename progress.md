@@ -34,7 +34,7 @@
 - [x] 【低】前端補齊自動化單元／元件測試（Vitest）並納入 CI（已合併，見 [Vitest 驗收](docs/evidence/web-vitest-ci-20261123.md)）。
 - [x] 【低】GIF 最佳化已合併（[PR #18](https://github.com/frobel0520/media-craft/pull/18)，合併提交 `52481fa`，[CI 與部署](https://github.com/frobel0520/media-craft/actions/runs/45520788706) 成功），影格、透明與播放時間驗證見 [GIF 驗收](docs/evidence/gif-optimize-20261123.md)；正式環境與實體手機待驗。
 - [x] 【低】音訊區間試聽與 WAV 匯出已合併（[PR #19](https://github.com/frobel0520/media-craft/pull/19)，合併提交 `b180dfb`，[CI 與部署](https://github.com/frobel0520/media-craft/actions/runs/45326891372) 成功），見[音訊剪輯驗收](docs/evidence/audio-clip-20261123.md)；正式環境、實體手機與大型檔案待實測。
-- [ ] 【低】評估 Phase 2 的 HEIC 本機解碼與按需懶載入（可行性評估進行中，見 [PR #26](https://github.com/frobel0520/media-craft/pull/26)；候選解碼器尚未選型，未導入任何 codec）。
+- [ ] 【低】評估 Phase 2 的 HEIC 本機解碼與按需懶載入：Chromium 原生解碼不可行、候選比較完成，建議先驗證 `libheif-js` WASM 版；LGPL-3.0 與 HEVC 專利需 Owner 決定，尚未達實作前提，見 [HEIC 可行性評估](docs/evidence/heic-feasibility-20261126.md)。
 
 ## 限制
 
