@@ -805,6 +805,13 @@ export function App() {
           <p className="hero__desc">
             由純 Rust 編譯的 WebAssembly 核心在瀏覽器背景執行，支援自動剝離 GPS 座標與相機資訊、批次轉為 WebP／JPEG／PNG 與一鍵打包 ZIP，所有檔案全程留在您的裝置內。
           </p>
+          <button
+            type="button"
+            className="btn btn--primary image-picker--mobile"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            選取圖片檔案
+          </button>
         </section>
 
         {wasmError && (
